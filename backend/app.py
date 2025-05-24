@@ -97,72 +97,70 @@ def create_qrcode():
 
 @app.route('/api/qrcodes', methods=['GET'])
 def get_qrcodes():
-    folder = request.args.get('folder')
-    query = QRCode.query
-    
-    if folder:
-        if folder == 'Uncategorized':
-            query = query.filter((QRCode.folder == '') | (QRCode.folder.is_(None)))
-        else:
-            query = query.filter(QRCode.folder == folder)
-    
-    qrcodes = query.all()
-    
-    return jsonify([{
-        'id': qr.id,
-        'name': qr.name,
-        'target_url': qr.target_url,
-        'short_code': qr.short_code,
-        'folder': qr.folder,
-        'created_at': qr.created_at.isoformat(),
-        'scan_count': len(qr.scans)
-    } for qr in qrcodes])
+    try:
+        app.logger.info("Fetching QR codes...")
+        # Get all QR codes, ordered by creation date (newest first)
+        qrcodes = QRCode.query.order_by(QRCode.created_at.desc()).all()
+        result = [{
+            'id': qr.id,
+            'name': qr.name,
+            'target_url': qr.target_url,
+            'folder': qr.folder,
+            'created_at': qr.created_at.isoformat(),
+            'scans': len(qr.scans)
+        } for qr in qrcodes]
+        app.logger.info(f"Found {len(qrcodes)} QR codes")
+        return jsonify(result)
+    except Exception as e:
+        app.logger.error(f"Error fetching QR codes: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to fetch QR codes', 'details': str(e)}), 500
 
 @app.route('/api/folders', methods=['GET'])
 def get_folders():
-    # Get all unique folders from the database
-    folders = db.session.query(QRCode.folder).distinct().all()
-    # Filter out None and empty strings, and sort alphabetically
-    folder_list = sorted([f[0] for f in folders if f[0]])
-    return jsonify(folder_list)
+    try:
+        app.logger.info("Fetching folders...")
+        # Get all unique folder names
+        folders = [folder[0] for folder in db.session.query(QRCode.folder).distinct().all() if folder[0]]
+        app.logger.info(f"Found folders: {folders}")
+        return jsonify(folders), 200
+    except Exception as e:
+        app.logger.error(f"Error fetching folders: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to fetch folders', 'details': str(e)}), 500
 
 @app.route('/api/folders', methods=['POST'])
 def create_folder():
-    data = request.get_json()
-    folder_name = data.get('name')
-    
-    if not folder_name or not folder_name.strip():
-        return jsonify({'error': 'Folder name is required'}), 400
-    
-    # Check if folder already exists
-    existing_folder = db.session.query(QRCode).filter(
-        QRCode.folder == folder_name
-    ).first()
-    
-    if existing_folder:
-        return jsonify({'error': 'Folder already exists'}), 400
-    
-    # Create a dummy QR code to represent the folder
-    # This ensures the folder appears in the folders list
     try:
-        import random
-        import string
-        short_code = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        folder_name = data.get('name')
         
-        qr = QRCode(
-            name=f"Folder: {folder_name}",
-            target_url="#",
-            short_code=short_code,
+        if not folder_name or not folder_name.strip():
+            return jsonify({'error': 'Folder name is required'}), 400
+        
+        app.logger.info(f"Creating folder: {folder_name}")
+        
+        # Check if folder already exists
+        existing_folder = db.session.query(QRCode).filter_by(folder=folder_name).first()
+        if existing_folder:
+            return jsonify({'error': 'Folder already exists'}), 409
+        
+        # Create a dummy QR code to represent the folder
+        new_qr = QRCode(
+            name=f'Folder: {folder_name}',
+            target_url='#',
             folder=folder_name
         )
         
-        db.session.add(qr)
+        db.session.add(new_qr)
         db.session.commit()
         
         return jsonify({'message': 'Folder created successfully'}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Error creating folder: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to create folder', 'details': str(e)}), 500
 
 @app.route('/api/folders/<string:folder_name>', methods=['PUT'])
 def update_folder(folder_name):
