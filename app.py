@@ -551,5 +551,6 @@ def get_daily_scan_stats():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    # Listen on all network interfaces (0.0.0.0) instead of just localhost
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    # Run the application
+    port = int(os.environ.get('PORT', 5001))
+    app.run(host='0.0.0.0', port=port, debug=False)
