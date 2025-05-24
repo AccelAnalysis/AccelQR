@@ -49,10 +49,10 @@ interface FolderItemProps {
 }
 
 const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRename, onDelete }) => {
+  const deleteDialog = useDisclosure();
   const [isRenaming, setIsRenaming] = useState(false);
   const [editedName, setEditedName] = useState(name);
   const inputRef = useRef<HTMLInputElement>(null);
-  const deleteDialog = useDisclosure();
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   const handleRename = async () => {
