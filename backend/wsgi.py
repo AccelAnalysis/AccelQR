@@ -1,5 +1,5 @@
 import os
-from app import app, db
+from .app import app, db
 
 # Initialize the database
 with app.app_context():
