@@ -28,7 +28,7 @@ import {
   FiEdit2, 
   FiTrash2,
   FiCheck,
-  FiX as FiXIcon
+  FiX
 } from 'react-icons/fi';
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
@@ -52,7 +52,7 @@ const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRen
   const [isRenaming, setIsRenaming] = useState(false);
   const [editedName, setEditedName] = useState(name);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const deleteDialog = useDisclosure();
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   const handleRename = async () => {
@@ -113,7 +113,7 @@ const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRen
                 />
                 <IconButton
                   aria-label="Cancel"
-                  icon={<FiXIcon />}
+                  icon={<FiX />}
                   size="xs"
                   variant="ghost"
                   onClick={() => {
@@ -148,7 +148,7 @@ const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRen
                   color="red.500"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onOpen();
+                    deleteDialog.onOpen();
                   }}
                 >
                   Delete
@@ -160,9 +160,9 @@ const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRen
       </HStack>
 
       <AlertDialog
-        isOpen={isOpen}
+        isOpen={deleteDialog.isOpen}
         leastDestructiveRef={cancelRef}
-        onClose={onClose}
+        onClose={deleteDialog.onClose}
       >
         <AlertDialogOverlay>
           <AlertDialogContent>
@@ -171,13 +171,13 @@ const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRen
               Are you sure you want to delete the folder "{name}"? This will also delete all QR codes in this folder.
             </AlertDialogBody>
             <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onClose}>
+              <Button ref={cancelRef} onClick={deleteDialog.onClose}>
                 Cancel
               </Button>
               <Button colorScheme="red" onClick={async () => {
                 const success = await onDelete();
                 if (success) {
-                  onClose();
+                  deleteDialog.onClose();
                 }
               }} ml={3}>
                 Delete
