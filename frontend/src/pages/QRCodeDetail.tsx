@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import React from 'react';
 import { 
@@ -12,6 +12,7 @@ import {
   Card, 
   CardBody, 
   CardHeader, 
+  CardFooter,
   Image, 
   Badge, 
   Divider,
@@ -28,9 +29,24 @@ import {
   Input,
   Textarea,
   Select,
-  FormHelperText
+  FormHelperText,
+  SimpleGrid,
+  Stat,
+  StatLabel,
+  StatNumber,
+  StatHelpText,
+  Tooltip,
+  IconButton,
+  Link as ChakraLink,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
 } from '@chakra-ui/react';
-import { FiEdit2, FiTrash2, FiArrowLeft, FiCopy, FiDownload } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiArrowLeft, FiCopy, FiDownload, FiExternalLink } from 'react-icons/fi';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -46,10 +62,16 @@ interface QRCode {
   folder: string | null;
 }
 
+interface ScanData {
+  date: string;
+  count: number;
+}
+
 // This component will always show a loading state, an error state, or the QR code details
 const QRCodeDetail: React.FC = (): React.ReactElement => {
   const { id } = useParams<{ id: string }>();
   const [qrCode, setQRCode] = useState<QRCode | null>(null);
+  const [scanData, setScanData] = useState<ScanData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [folders, setFolders] = useState<string[]>([]);
@@ -64,16 +86,30 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
   const navigate = useNavigate();
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
 
   const fetchQRCode = async () => {
     try {
-      const response = await axios.get(`${API_URL}/qrcodes/${id}`);
-      setQRCode(response.data);
+      const [qrResponse, statsResponse] = await Promise.all([
+        axios.get(`${API_URL}/qrcodes/${id}`),
+        axios.get(`${API_URL}/qrcodes/${id}/stats`)
+      ]);
+      
+      setQRCode(qrResponse.data);
+      setScanData(statsResponse.data.daily_scans || []);
       setFormData({
-        name: response.data.name,
-        target_url: response.data.target_url,
-        description: response.data.description || '',
-        folder: response.data.folder || ''
+        name: qrResponse.data.name,
+        target_url: qrResponse.data.target_url,
+        description: qrResponse.data.description || '',
+        folder: qrResponse.data.folder || ''
       });
     } catch (error) {
       console.error('Error fetching QR code:', error);
@@ -367,9 +403,113 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
         </CardBody>
       </Card>
 
-      <Card>
+      <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={6} mb={8}>
+        <StatCard
+          title="Total Scans"
+          value={qrCode.scan_count}
+          description="All time"
+        />
+        <StatCard
+          title="Scans (Last 30 Days)"
+          value={scanData.reduce((sum, day) => sum + day.count, 0)}
+          description="vs previous period"
+        />
+        <StatCard
+          title="Last Scan"
+          value={scanData.length > 0 ? scanData[scanData.length - 1].count : 0}
+          description={scanData.length > 0 ? `on ${scanData[scanData.length - 1].date}` : 'No scans yet'}
+        />
+      </SimpleGrid>
+
+      <Card variant="outline" mb={8}>
         <CardHeader>
-          <Heading size="md">QR Code</Heading>
+          <Heading size="md">Scan Analytics</Heading>
+        </CardHeader>
+        <CardBody>
+          {scanData.length > 0 ? (
+            <Box height="400px">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={scanData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis />
+                  <RechartsTooltip 
+                    formatter={(value: number) => [value, 'Scans']}
+                    labelFormatter={(label) => `Date: ${label}`}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="count"
+                    name="Scans"
+                    stroke="#3182ce"
+                    strokeWidth={2}
+                    activeDot={{ r: 8 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </Box>
+          ) : (
+            <Box textAlign="center" py={10}>
+              <Text color="gray.500">No scan data available yet</Text>
+            </Box>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card mb={6}>
+        <CardHeader>
+          <HStack justify="space-between" align="center">
+            <Heading size="lg">QR Code</Heading>
+            <HStack>
+              <Tooltip label="Copy shareable link">
+                <IconButton
+                  aria-label="Copy shareable link"
+                  icon={<FiCopy />}
+                  onClick={() => copyToClipboard(`${window.location.origin}/r/${qrCode.short_code}`)}
+                  variant="outline"
+                />
+              </Tooltip>
+              <Tooltip label="Visit target URL">
+                <Box
+                  as="a"
+                  href={qrCode.target_url.startsWith('http') ? qrCode.target_url : `https://${qrCode.target_url}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Visit target URL"
+                  display="inline-flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  width="40px"
+                  height="40px"
+                  border="1px solid"
+                  borderColor="gray.200"
+                  borderRadius="md"
+                  _hover={{
+                    bg: 'gray.50',
+                    textDecoration: 'none'
+                  }}
+                  onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                    if (!qrCode.target_url) {
+                      e.preventDefault();
+                      toast({
+                        title: 'Error',
+                        description: 'No target URL specified',
+                        status: 'error',
+                        duration: 3000,
+                        isClosable: true,
+                      });
+                    }
+                  }}
+                >
+                  <FiExternalLink />
+                </Box>
+              </Tooltip>
+            </HStack>
+          </HStack>
         </CardHeader>
         <CardBody>
           <Box maxW="300px" mx="auto">
@@ -423,5 +563,17 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
     </Box>
   ) as unknown as React.ReactElement;
 };
+
+const StatCard = ({ title, value, description }: { title: string; value: number; description: string }) => (
+  <Card variant="outline">
+    <CardBody>
+      <Stat>
+        <StatLabel color="gray.600">{title}</StatLabel>
+        <StatNumber fontSize="2xl">{value}</StatNumber>
+        <StatHelpText>{description}</StatHelpText>
+      </Stat>
+    </CardBody>
+  </Card>
+);
 
 export default QRCodeDetail;

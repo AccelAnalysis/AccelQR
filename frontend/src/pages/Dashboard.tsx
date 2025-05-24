@@ -2,21 +2,30 @@ import { useState, useEffect } from 'react';
 import { 
   Box, 
   Heading, 
-  Button, 
-  Text, 
-  Badge, 
-  HStack, 
-  VStack,
-  Spinner, 
-  useToast, 
   Card, 
   CardHeader, 
   CardBody, 
   SimpleGrid, 
-  Flex 
+  Flex, 
+  Button, 
+  Text, 
+  useToast,
+  VStack,
+  HStack,
+  Spinner,
+  Badge,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Link as ChakraLink,
+  Select
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
-import { FiPlus } from 'react-icons/fi';
+import { FiRefreshCw, FiDownload } from 'react-icons/fi';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import axios from 'axios';
 import FolderSidebar from '../components/FolderSidebar';
 
@@ -30,13 +39,106 @@ interface QRCode {
   folder: string | null;
 }
 
+interface DailyScanData {
+  date: string;
+  count: number;
+}
+
+interface TimeRange {
+  start: string;
+  end: string;
+  group_by: string;
+  date_format: string;
+}
+
+interface DashboardStats {
+  scans: DailyScanData[];
+  total_scans: number;
+  total_qrcodes: number;
+  time_range: TimeRange;
+}
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 const Dashboard = () => {
   const [qrcodes, setQRCodes] = useState<QRCode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  const [timeRange, setTimeRange] = useState<string>('30d');
+  const [isExporting, setIsExporting] = useState(false);
   const toast = useToast();
+  
+  const timeRangeOptions = [
+    { value: '24h', label: 'Last 24 hours' },
+    { value: '3d', label: 'Last 3 days' },
+    { value: 'week', label: 'Last week' },
+    { value: '30d', label: 'Last 30 days' },
+    { value: '60d', label: 'Last 60 days' },
+    { value: '90d', label: 'Last 90 days' },
+    { value: '6m', label: 'Last 6 months' },
+    { value: 'year', label: 'Last year' },
+    { value: 'all', label: 'All time' },
+  ];
+
+  // Format number with commas
+  const formatNumber = (num: number) => {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
+
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    const options: Intl.DateTimeFormatOptions = { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    return new Date(dateString).toLocaleDateString(undefined, options);
+  };
+
+  const fetchDashboardStats = async (folder: string | null = null, range: string = '30d') => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (folder && folder !== 'All QR Codes') {
+        params.append('folder', folder);
+      }
+      params.append('time_range', range);
+      
+      console.log('Fetching dashboard stats with params:', params.toString());
+      const response = await axios.get(`${API_URL}/stats/dashboard?${params.toString()}`);
+      console.log('Received dashboard stats:', response.data);
+      
+      // Validate the data structure
+      if (response.data && Array.isArray(response.data.scans)) {
+        console.log('Scans data structure is valid');
+        console.log('First scan item:', response.data.scans[0]);
+      } else {
+        console.error('Invalid data structure received:', response.data);
+      }
+      
+      setDashboardStats(response.data);
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load dashboard statistics',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleTimeRangeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newRange = e.target.value;
+    setTimeRange(newRange);
+    fetchDashboardStats(activeFolder, newRange);
+  };
 
   const fetchQRCodes = async (folder: string | null = null) => {
     try {
@@ -57,79 +159,337 @@ const Dashboard = () => {
     }
   };
 
-  useEffect(() => {
-    fetchQRCodes(activeFolder === 'Uncategorized' ? 'Uncategorized' : activeFolder || undefined);
-  }, [activeFolder]);
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
+  // Handle folder selection
   const handleFolderSelect = (folder: string | null) => {
     setActiveFolder(folder);
+    fetchQRCodes(folder === 'Uncategorized' ? 'Uncategorized' : folder || undefined);
+    fetchDashboardStats(folder);
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchQRCodes(activeFolder);
+    fetchDashboardStats(activeFolder, timeRange);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFolder, timeRange]);
+
+  const refreshData = () => {
+    fetchQRCodes(activeFolder);
+    fetchDashboardStats(activeFolder, timeRange);
+  };
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams();
+      if (activeFolder && activeFolder !== 'All QR Codes') {
+        params.append('folder', activeFolder);
+      }
+      params.append('time_range', timeRange);
+      
+      const response = await fetch(`${API_URL}/stats/dashboard/export?${params.toString()}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to export data');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dashboard_export_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      
+      toast({
+        title: 'Export successful',
+        description: 'Dashboard data has been exported',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      toast({
+        title: 'Export failed',
+        description: 'Failed to export dashboard data',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
-    <Flex>
+    <Box display="flex" minH="100vh">
       <FolderSidebar activeFolder={activeFolder} onSelectFolder={handleFolderSelect} />
-      <Box flex={1} p={8}>
-        <HStack justify="space-between" mb={8}>
-          <Heading as="h1" size="xl">
-            {activeFolder === 'Uncategorized' 
-              ? 'Uncategorized QR Codes'
-              : activeFolder 
-                ? `Folder: ${activeFolder}` 
-                : 'All QR Codes'}
-          </Heading>
-          <Button as={RouterLink} to="/new" leftIcon={<FiPlus />} colorScheme="blue">
-            New QR Code
-          </Button>
-        </HStack>
+      <Box flex={1} p={5}>
+        <Flex justify="space-between" align="center" mb={6}>
+          <VStack align="flex-start" spacing={1}>
+            <Heading as="h1" size="lg">
+              {activeFolder ? `${activeFolder} Dashboard` : 'Dashboard'}
+            </Heading>
+            <Text color="gray.500" fontSize="sm">
+              {activeFolder ? 'Viewing folder analytics' : 'Viewing all QR codes'}
+            </Text>
+          </VStack>
+          <HStack spacing={3}>
+            <Button
+              leftIcon={<FiDownload />}
+              onClick={handleExport}
+              isLoading={isExporting}
+              loadingText="Exporting..."
+              colorScheme="green"
+              variant="outline"
+              isDisabled={loading}
+            >
+              Export Data
+            </Button>
+            <Button
+              leftIcon={<FiRefreshCw />}
+              onClick={refreshData}
+              isLoading={loading}
+              colorScheme="blue"
+              variant="outline"
+            >
+              Refresh
+            </Button>
+          </HStack>
+        </Flex>
 
         {loading ? (
-          <Box textAlign="center" py={10}>
+          <Flex justify="center" align="center" minH="200px">
             <Spinner size="xl" />
-            <Text mt={4}>Loading QR codes...</Text>
-          </Box>
-        ) : qrcodes.length === 0 ? (
-          <Box textAlign="center" py={10}>
-            <Text fontSize="lg" mb={4}>
-              {activeFolder 
-                ? `No QR codes found in this folder` 
-                : 'No QR codes found'}
-            </Text>
-            <Button as={RouterLink} to="/new" colorScheme="blue">
-              Create your first QR code
-            </Button>
-          </Box>
-        ) : (
-          <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-            {qrcodes.map((qr) => (
-              <Card key={qr.id} as={RouterLink} to={`/qrcodes/${qr.id}`} _hover={{ transform: 'translateY(-4px)', boxShadow: 'lg' }} transition="all 0.2s">
-                <CardHeader>
-                  <VStack align="stretch" spacing={2}>
-                    <HStack justify="space-between">
-                      <Heading size="md">{qr.name}</Heading>
-                      <Badge colorScheme={qr.scan_count > 0 ? 'green' : 'gray'}>{qr.scan_count} scans</Badge>
-                    </HStack>
-                    {qr.folder && (
-                      <Badge alignSelf="flex-start" colorScheme="blue" variant="subtle">
-                        {qr.folder}
-                      </Badge>
-                    )}
-                  </VStack>
+          </Flex>
+        ) : dashboardStats ? (
+          <Box>
+            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={5} mb={8}>
+              <Card>
+                <CardHeader pb={0}>
+                  <Text fontSize="sm" color="gray.500">Total Scans</Text>
                 </CardHeader>
                 <CardBody>
-                  <Text color="gray.600" noOfLines={1}>{qr.target_url}</Text>
-                  <Text fontSize="sm" color="gray.500" mt={2}>Created: {formatDate(qr.created_at)}</Text>
+                  <Text fontSize="3xl" fontWeight="bold">
+                    {formatNumber(dashboardStats.total_scans)}
+                  </Text>
+                  <Text fontSize="sm" color="gray.500">
+                    {activeFolder ? 'In this folder' : 'All time'}
+                  </Text>
                 </CardBody>
               </Card>
-            ))}
-          </SimpleGrid>
+              <Card>
+                <CardHeader pb={0}>
+                  <Text fontSize="sm" color="gray.500">QR Codes</Text>
+                </CardHeader>
+                <CardBody>
+                  <Text fontSize="3xl" fontWeight="bold">
+                    {formatNumber(dashboardStats.total_qrcodes)}
+                  </Text>
+                  <Text fontSize="sm" color="gray.500">
+                    {activeFolder ? 'In this folder' : 'Total created'}
+                  </Text>
+                </CardBody>
+              </Card>
+              <Card>
+                <CardHeader pb={0}>
+                  <Text fontSize="sm" color="gray.500">Avg. Scans per Code</Text>
+                </CardHeader>
+                <CardBody>
+                  <Text fontSize="3xl" fontWeight="bold">
+                    {dashboardStats.total_qrcodes > 0 
+                      ? (dashboardStats.total_scans / dashboardStats.total_qrcodes).toFixed(1)
+                      : '0.0'}
+                  </Text>
+                  <Text fontSize="sm" color="gray.500">
+                    {activeFolder ? 'In this folder' : 'Lifetime average'}
+                  </Text>
+                </CardBody>
+              </Card>
+            </SimpleGrid>
+
+            <Card mb={8}>
+              <CardHeader pb={0}>
+                <Flex justify="space-between" align="center" mb={4}>
+                  <Text fontSize="lg" fontWeight="semibold">
+                    Scan Activity
+                    {activeFolder && ` - ${activeFolder}`}
+                  </Text>
+                  <Select 
+                    value={timeRange}
+                    onChange={handleTimeRangeChange}
+                    size="sm" 
+                    width="200px"
+                    variant="filled"
+                  >
+                    {timeRangeOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Flex>
+              </CardHeader>
+              <CardBody>
+                <Box h="400px" position="relative" border="1px solid red" p={4}>
+                  <Box position="absolute" top={2} left={2} bg="white" p={1} zIndex={10}>
+                    <Text fontSize="xs" color="gray.500">
+                      Data points: {dashboardStats?.scans?.length || 0}
+                    </Text>
+                  </Box>
+                  {dashboardStats?.scans?.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
+                    <LineChart data={dashboardStats.scans}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis 
+                        dataKey="date"
+                        tick={{ fontSize: 12, fill: '#4A5568' }}
+                        axisLine={{ stroke: '#A0AEC0' }}
+                        tickLine={{ stroke: '#A0AEC0' }}
+                        tickFormatter={(value) => {
+                          if (!value) return '';
+                          const date = new Date(value);
+                          if (isNaN(date.getTime())) return value;
+                          
+                          const format = dashboardStats.time_range?.date_format || '%Y-%m-%d';
+                          if (format.includes('H')) {
+                            // Hourly format
+                            return date.toLocaleTimeString('en-US', { 
+                              hour: 'numeric',
+                              hour12: true 
+                            });
+                          } else if (format.includes('m') && !format.includes('H')) {
+                            // Monthly format
+                            return date.toLocaleDateString('en-US', { 
+                              month: 'short',
+                              year: 'numeric'
+                            });
+                          } else {
+                            // Daily format
+                            return date.toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              day: 'numeric'
+                            });
+                          }
+                        }}
+                      />
+                      <YAxis 
+                        tick={{ fontSize: 12, fill: '#4A5568' }}
+                        axisLine={{ stroke: '#A0AEC0' }}
+                        tickLine={{ stroke: '#A0AEC0' }}
+                        width={40}
+                      />
+                      <RechartsTooltip 
+                        contentStyle={{ backgroundColor: '#2D3748', color: 'white' }}
+                        labelFormatter={(value: string) => {
+                          const date = new Date(value);
+                          if (isNaN(date.getTime())) return value;
+                          
+                          const format = dashboardStats.time_range?.date_format || '%Y-%m-%d';
+                          if (format.includes('H')) {
+                            // Hourly format
+                            return date.toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              hour12: true
+                            });
+                          } else if (format.includes('m') && !format.includes('H')) {
+                            // Monthly format
+                            return date.toLocaleDateString('en-US', {
+                              month: 'long',
+                              year: 'numeric'
+                            });
+                          } else {
+                            // Daily format
+                            return date.toLocaleDateString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            });
+                          }
+                        }}
+                        formatter={(value: number) => [`${value} scans`, 'Scans']}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="count" 
+                        stroke="#3182ce" 
+                        strokeWidth={2}
+                        dot={dashboardStats.scans.length < 15} // Only show dots for smaller datasets
+                        activeDot={{ r: 6 }}
+                      />
+                    </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <Box display="flex" alignItems="center" justifyContent="center" h="100%" color="gray.500">
+                      No chart data available
+                    </Box>
+                  )}
+                </Box>
+              </CardBody>
+            </Card>
+
+            <Box>
+              <Heading size="lg" mb={6}>
+                {activeFolder === 'Uncategorized' 
+                  ? 'Uncategorized QR Codes'
+                  : activeFolder 
+                  ? `QR Codes in ${activeFolder}`
+                  : 'All QR Codes'}
+              </Heading>
+              
+              {qrcodes.length > 0 ? (
+                <Table variant="simple">
+                  <Thead>
+                    <Tr>
+                      <Th>Name</Th>
+                      <Th>Short Code</Th>
+                      <Th>Scans</Th>
+                      <Th>Created</Th>
+                      <Th>Folder</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {qrcodes.map((qr) => (
+                      <Tr key={qr.id} _hover={{ bg: 'gray.50' }}>
+                        <Td>
+                          <ChakraLink as={RouterLink} to={`/qrcodes/${qr.id}`} color="blue.500">
+                            {qr.name}
+                          </ChakraLink>
+                        </Td>
+                        <Td>
+                          <code>{qr.short_code}</code>
+                        </Td>
+                        <Td>{formatNumber(qr.scan_count)}</Td>
+                        <Td>{formatDate(qr.created_at)}</Td>
+                        <Td>
+                          {qr.folder ? (
+                            <Badge colorScheme="blue">{qr.folder}</Badge>
+                          ) : (
+                            <Badge colorScheme="gray">Uncategorized</Badge>
+                          )}
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              ) : (
+                <Text>No QR codes found{activeFolder ? ' in this folder' : ''}.</Text>
+              )}
+            </Box>
+          </Box>
+        ) : (
+          <Text>No data available</Text>
         )}
       </Box>
-    </Flex>
-
+    </Box>
   );
 };
 
