@@ -13,13 +13,13 @@ import {
   IconButton, 
   InputGroup, 
   InputRightElement,
-  useDisclosure,
   AlertDialog,
   AlertDialogOverlay,
   AlertDialogContent,
   AlertDialogHeader,
   AlertDialogBody,
-  AlertDialogFooter
+  AlertDialogFooter,
+  useDisclosure
 } from '@chakra-ui/react';
 import { 
   FiFolder, 
@@ -28,7 +28,7 @@ import {
   FiEdit2, 
   FiTrash2,
   FiCheck,
-  FiX
+  FiXCircle
 } from 'react-icons/fi';
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
@@ -113,7 +113,7 @@ const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRen
                 />
                 <IconButton
                   aria-label="Cancel"
-                  icon={<FiX />}
+                  icon={<FiXCircle />}
                   size="xs"
                   variant="ghost"
                   onClick={() => {
