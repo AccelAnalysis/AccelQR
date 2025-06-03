@@ -87,9 +87,21 @@ else:
     app.config['SQLALCHEMY_DATABASE_URI'] = uri
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+}
 
+# Initialize SQLAlchemy
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
+# Ensure tables are created
+try:
+    with app.app_context():
+        db.create_all()
+except Exception as e:
+    print(f"Error creating database tables: {e}")
 
 class QRCode(db.Model):
     __tablename__ = 'qrcodes'
@@ -852,9 +864,16 @@ def get_enhanced_qrcode_stats(qrcode_id):
             'error': str(e)
         }), 200
 
-if __name__ == '__main__':
+# Initialize database
+def init_db():
     with app.app_context():
+        # Create all database tables
         db.create_all()
+        print("Database tables created successfully")
+
+if __name__ == '__main__':
+    # Initialize database when starting the app
+    init_db()
     # Run the application
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=False)
