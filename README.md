@@ -62,21 +62,40 @@ A full-stack application for generating and managing QR codes with analytics.
 
 ## Deployment
 
-### Frontend (Vercel)
+### Render
 
-1. Push your code to GitHub
-2. Import the repository in Vercel
-3. Set the environment variable:
-   - `VITE_API_URL`: Your backend API URL
+This project is configured for deployment on [Render](https://render.com/). Follow these steps to deploy:
 
-### Backend (Render/Railway)
+1. **Create a new Web Service** on Render and connect your GitHub/GitLab repository
 
-1. Push your code to GitHub
-2. Create a new web service
-3. Set the environment variables:
-   - `FLASK_APP=app.py`
-   - `FLASK_ENV=production`
-   - `DATABASE_URL`: Your production database URL
+2. **Configure the backend service**:
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn app:app`
+   - **Environment Variables**:
+     - `PYTHON_VERSION`: 3.9.0
+     - `FLASK_APP`: app.py
+     - `FLASK_ENV`: production
+     - `DATABASE_URL`: Your PostgreSQL connection string
+     - `SECRET_KEY`: Your secret key
+
+3. **Configure the frontend service**:
+   - **Build Command**: `npm install && npm run build`
+   - **Publish Directory**: `dist`
+   - **Environment Variables**:
+     - `VITE_API_URL`: Your backend service URL (e.g., `https://your-backend-service.onrender.com`)
+
+4. **Set up a PostgreSQL database** on Render and connect it to your backend service
+
+### Environment Variables
+
+For local development, create a `.env` file in the backend directory with the following variables:
+
+```
+FLASK_APP=app.py
+FLASK_ENV=development
+DATABASE_URL=sqlite:///site.db
+SECRET_KEY=your-secret-key
+```
 
 ## License
 

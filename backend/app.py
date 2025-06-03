@@ -7,7 +7,12 @@ from flask_migrate import Migrate
 from flask_cors import CORS
 import qrcode
 from dotenv import load_dotenv
+import geoip2.database
+import geoip2.errors
+from user_agents import parse
+from typing import Dict, Optional
 
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
@@ -32,12 +37,11 @@ CORS(app, resources={
     }
 })
 
-# Handle PostgreSQL URL format for Render
+# Configure SQLAlchemy to use SQLite
 uri = os.getenv('DATABASE_URL')
 if uri and uri.startswith('postgres://'):
     uri = uri.replace('postgres://', 'postgresql://', 1)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = uri or 'sqlite:///qrcodes.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = uri or f'sqlite:///{os.path.join(os.getcwd(), "instance/qrcodes.db")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -59,9 +63,22 @@ class Scan(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     qr_code_id = db.Column(db.Integer, db.ForeignKey('qrcodes.id', ondelete='CASCADE'), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     ip_address = db.Column(db.String(50))
     user_agent = db.Column(db.String(200))
+    
+    # Enhanced tracking fields
+    country = db.Column(db.String(100), index=True)
+    region = db.Column(db.String(100))
+    city = db.Column(db.String(100))
+    timezone = db.Column(db.String(50))
+    device_type = db.Column(db.String(50))  # mobile, tablet, desktop, other
+    os_family = db.Column(db.String(100))
+    browser_family = db.Column(db.String(100))
+    referrer_domain = db.Column(db.String(200))
+    time_on_page = db.Column(db.Integer)  # in seconds
+    scrolled = db.Column(db.Boolean, default=False)
+    scan_method = db.Column(db.String(50))  # camera, image_upload, etc.
 
 @app.route('/api/qrcodes', methods=['POST'])
 def create_qrcode():
@@ -85,35 +102,71 @@ def create_qrcode():
     db.session.add(qr)
     db.session.commit()
     
-    return jsonify({
+    # Create response without accessing the scans relationship
+    response_data = {
         'id': qr.id,
         'name': qr.name,
         'target_url': qr.target_url,
         'short_code': qr.short_code,
         'folder': qr.folder,
         'created_at': qr.created_at.isoformat(),
-        'scan_count': len(qr.scans)
-    }), 201
+        'scan_count': 0  # Initialize with 0 scans
+    }
+    
+    # Commit the transaction
+    db.session.commit()
+    
+    return jsonify(response_data), 201
 
 @app.route('/api/qrcodes', methods=['GET'])
 def get_qrcodes():
     try:
-        app.logger.info("Fetching QR codes...")
-        # Get all QR codes, ordered by creation date (newest first)
-        qrcodes = QRCode.query.order_by(QRCode.created_at.desc()).all()
-        result = [{
+        # Get query parameters
+        folder = request.args.get('folder')
+        search = request.args.get('search', '').strip()
+        
+        # Base query
+        query = QRCode.query
+        
+        # Filter by folder if specified
+        if folder and folder != 'all':
+            if folder == 'uncategorized':
+                query = query.filter(QRCode.folder.is_(None))
+            else:
+                query = query.filter(QRCode.folder == folder)
+        
+        # Search by name or URL if search term is provided
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                (QRCode.name.ilike(search_term)) | 
+                (QRCode.target_url.ilike(search_term))
+            )
+        
+        # Order by most recently created first
+        query = query.order_by(QRCode.created_at.desc())
+        
+        # Get all matching QR codes
+        qrcodes = query.all()
+        
+        # Convert to list of dictionaries
+        qrcodes_data = [{
             'id': qr.id,
             'name': qr.name,
             'target_url': qr.target_url,
+            'short_code': qr.short_code,
             'folder': qr.folder,
             'created_at': qr.created_at.isoformat(),
-            'scans': len(qr.scans)
+            'scan_count': 0  # Temporarily set to 0 to avoid relationship access
         } for qr in qrcodes]
-        app.logger.info(f"Found {len(qrcodes)} QR codes")
-        return jsonify(result)
+        
+        return jsonify(qrcodes_data), 200
+        
     except Exception as e:
-        app.logger.error(f"Error fetching QR codes: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Failed to fetch QR codes', 'details': str(e)}), 500
+        return jsonify({
+            'error': 'Failed to fetch QR codes',
+            'details': str(e)
+        }), 500
 
 @app.route('/api/folders', methods=['GET'])
 def get_folders():
@@ -146,10 +199,16 @@ def create_folder():
         if existing_folder:
             return jsonify({'error': 'Folder already exists'}), 409
         
+        # Generate a unique short code for the folder
+        import random
+        import string
+        short_code = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        
         # Create a dummy QR code to represent the folder
         new_qr = QRCode(
             name=f'Folder: {folder_name}',
             target_url='#',
+            short_code=short_code,
             folder=folder_name
         )
         
@@ -245,40 +304,70 @@ def get_or_update_qrcode(qrcode_id):
 @app.route('/api/qrcodes/<short_code>/stats', methods=['GET'])
 @app.route('/api/qrcodes/<int:qrcode_id>/stats', methods=['GET'])
 def get_qrcode_stats(qrcode_id=None, short_code=None):
-    # Handle both ID and short_code based on which one is provided
-    if qrcode_id is not None:
-        qr = QRCode.query.get_or_404(qrcode_id)
-    else:
-        qr = QRCode.query.filter_by(short_code=short_code).first_or_404()
-    
-    # Get scan data for the last 30 days
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    recent_scans = Scan.query.filter(
-        Scan.qr_code_id == qr.id,
-        Scan.timestamp >= thirty_days_ago
-    ).all()
-    
-    # Group scans by day
-    daily_scans = {}
-    for scan in recent_scans:
-        day = scan.timestamp.strftime('%Y-%m-%d')
-        daily_scans[day] = daily_scans.get(day, 0) + 1
-    
-    # Ensure we have entries for all days in the last 30 days
-    today = datetime.utcnow().date()
-    for i in range(30):
-        day = (today - timedelta(days=i)).strftime('%Y-%m-%d')
-        if day not in daily_scans:
-            daily_scans[day] = 0
-    
-    # Convert to list of {date, count} objects and sort by date
-    daily_scans_list = [{'date': k, 'count': v} for k, v in sorted(daily_scans.items())]
-    
-    return jsonify({
-        'total_scans': len(qr.scans),
-        'recent_scans': len(recent_scans),
-        'daily_scans': daily_scans_list
-    })
+    try:
+        # Handle both ID and short_code based on which one is provided
+        if qrcode_id is not None:
+            qr = QRCode.query.get_or_404(qrcode_id)
+        else:
+            qr = QRCode.query.filter_by(short_code=short_code).first_or_404()
+        
+        # Get scan data for the last 30 days
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        
+        # First, get the total number of scans for this QR code
+        total_scans = db.session.query(db.func.count(Scan.id)).filter(
+            Scan.qr_code_id == qr.id
+        ).scalar() or 0
+        
+        # Then get the recent scans count (last 30 days)
+        recent_scans_count = db.session.query(db.func.count(Scan.id)).filter(
+            Scan.qr_code_id == qr.id,
+            Scan.timestamp >= thirty_days_ago
+        ).scalar() or 0
+        
+        # Get daily scan counts for the last 30 days using a raw SQL query to avoid ORM issues
+        from sqlalchemy import text
+        
+        daily_scans_query = text("""
+        SELECT 
+            date(timestamp) as day, 
+            COUNT(*) as count 
+        FROM scans 
+        WHERE qr_code_id = :qr_code_id AND timestamp >= :start_date 
+        GROUP BY date(timestamp)
+        """)
+        
+        # Execute the raw query with parameters
+        result = db.session.execute(
+            daily_scans_query,
+            {'qr_code_id': qr.id, 'start_date': thirty_days_ago}
+        ).fetchall()
+        
+        # Convert to a dictionary for easier processing
+        daily_scans = {str(row[0]): row[1] for row in result}
+        
+        # Ensure we have entries for all days in the last 30 days
+        today = datetime.utcnow().date()
+        for i in range(30):
+            day = (today - timedelta(days=i)).strftime('%Y-%m-%d')
+            if day not in daily_scans:
+                daily_scans[day] = 0
+        
+        # Convert to list of {date, count} objects and sort by date
+        daily_scans_list = [{'date': k, 'count': v} for k, v in sorted(daily_scans.items())]
+        
+        return jsonify({
+            'total_scans': total_scans,
+            'recent_scans': recent_scans_count,
+            'daily_scans': daily_scans_list
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error in get_qrcode_stats: {str(e)}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to fetch QR code stats',
+            'details': str(e)
+        }), 500
 
 @app.route('/api/qrcodes/<short_code>/image', methods=['GET'])
 def get_qrcode_image(short_code):
@@ -332,14 +421,41 @@ def delete_qrcode(qrcode_id):
 def redirect_short_code(short_code):
     qr = QRCode.query.filter_by(short_code=short_code).first_or_404()
     
-    # Record the scan
+    # Get referrer domain
+    referrer = request.referrer
+    referrer_domain = None
+    if referrer:
+        from urllib.parse import urlparse
+        parsed_uri = urlparse(referrer)
+        referrer_domain = parsed_uri.netloc
+    
+    # Parse user agent
+    user_agent_data = parse(request.user_agent.string)
+    
+    # Create scan record with enhanced data
     scan = Scan(
         qr_code_id=qr.id,
         ip_address=request.remote_addr,
-        user_agent=request.user_agent.string
+        user_agent=request.user_agent.string,
+        referrer_domain=referrer_domain,
+        scan_method=request.args.get('scan_method', 'camera'),
+        device_type='mobile' if user_agent_data.is_mobile else 
+                   'tablet' if user_agent_data.is_tablet else 
+                   'desktop' if user_agent_data.is_pc else 'other',
+        os_family=user_agent_data.os.family,
+        browser_family=user_agent_data.browser.family,
+        **get_geographic_data(request.remote_addr)
     )
+    
     db.session.add(scan)
     db.session.commit()
+    
+    # Add scan ID to URL for tracking time on page
+    redirect_url = qr.target_url
+    if '?' in redirect_url:
+        redirect_url += f'&scan_id={scan.id}'
+    else:
+        redirect_url += f'?scan_id={scan.id}'
     
     return f'''
     <!DOCTYPE html>
@@ -358,28 +474,39 @@ def redirect_short_code(short_code):
     '''
 
 def get_date_range(time_range):
-    now = datetime.utcnow()
-    if time_range == '24h':
-        return now - timedelta(hours=24), now, 'hour', '%H:00'
-    elif time_range == '3d':
-        return now - timedelta(days=3), now, 'day', '%Y-%m-%d'
-    elif time_range == 'week':
-        return now - timedelta(weeks=1), now, 'day', '%Y-%m-%d'
-    elif time_range == '30d':
+    try:
+        if not time_range:
+            time_range = '30d'  # Default to 30 days if no time range is provided
+            
+        now = datetime.utcnow()
+        time_range = str(time_range).lower()  # Ensure time_range is a string and lowercase
+        
+        if time_range == '24h':
+            return now - timedelta(hours=24), now, 'hour', '%H:00'
+        elif time_range == '3d':
+            return now - timedelta(days=3), now, 'day', '%Y-%m-%d'
+        elif time_range == 'week':
+            return now - timedelta(weeks=1), now, 'day', '%Y-%m-%d'
+        elif time_range == '30d':
+            return now - timedelta(days=30), now, 'day', '%Y-%m-%d'
+        elif time_range == '60d':
+            return now - timedelta(days=60), now, 'day', '%Y-%m-%d'
+        elif time_range == '90d':
+            return now - timedelta(days=90), now, 'day', '%Y-%m-%d'
+        elif time_range == '6m':
+            return now - timedelta(days=180), now, 'month', '%Y-%m'
+        elif time_range == 'year':
+            return now - timedelta(days=365), now, 'month', '%Y-%m'
+        else:  # all time or unknown
+            first_scan = db.session.query(db.func.min(Scan.timestamp)).scalar()
+            if not first_scan:
+                first_scan = now - timedelta(days=30)  # Default to 30 days if no data
+            return first_scan, now, 'month', '%Y-%m'
+    except Exception as e:
+        app.logger.error(f"Error in get_date_range: {str(e)}")
+        # Return a default range in case of any error
+        now = datetime.utcnow()
         return now - timedelta(days=30), now, 'day', '%Y-%m-%d'
-    elif time_range == '60d':
-        return now - timedelta(days=60), now, 'day', '%Y-%m-%d'
-    elif time_range == '90d':
-        return now - timedelta(days=90), now, 'day', '%Y-%m-%d'
-    elif time_range == '6m':
-        return now - timedelta(days=180), now, 'month', '%Y-%m'
-    elif time_range == 'year':
-        return now - timedelta(days=365), now, 'month', '%Y-%m'
-    else:  # all time
-        first_scan = db.session.query(db.func.min(Scan.timestamp)).scalar()
-        if not first_scan:
-            first_scan = now - timedelta(days=30)  # Default to 30 days if no data
-        return first_scan, now, 'month', '%Y-%m'
 
 @app.route('/api/stats/dashboard/export', methods=['GET'])
 def export_dashboard_stats():
@@ -423,82 +550,104 @@ def export_dashboard_stats():
 
 @app.route('/api/stats/dashboard', methods=['GET'])
 def get_dashboard_stats():
-    # Get query parameters
-    folder = request.args.get('folder')
-    time_range = request.args.get('time_range', '30d')  # Default to 30 days
-    
-    # Parse the time range
-    start_date, end_date, group_by, date_format = get_date_range(time_range)
-    
-    # Base query for QR codes
-    qrcode_query = QRCode.query
-    
-    # Apply folder filter if specified
-    if folder and folder.lower() != 'all qrcodes':
-        qrcode_query = qrcode_query.filter(QRCode.folder == folder)
-    
-    # Get total number of QR codes
-    total_qrcodes = qrcode_query.count()
-    
-    # Base query for scans
-    scan_query = db.session.query(Scan).filter(
-        Scan.timestamp.between(start_date, end_date)
-    )
-    
-    # Apply folder filter to scans if specified
-    if folder and folder.lower() != 'all qrcodes':
-        scan_query = scan_query.join(QRCode).filter(QRCode.folder == folder)
-    
-    # Get total number of scans in the selected time range
-    total_scans = scan_query.count()
-    
-    # Base query for time-based scans
-    if group_by == 'hour':
-        date_trunc = db.func.date_format(Scan.timestamp, '%Y-%m-%d %H:00:00')
-    elif group_by == 'day':
-        date_trunc = db.func.date(Scan.timestamp)
-    else:  # month
-        date_trunc = db.func.date_format(Scan.timestamp, '%Y-%m-01')
-    
-    scans_query = db.session.query(
-        date_trunc.label('date'),
-        db.func.count(Scan.id).label('count')
-    ).filter(
-        Scan.timestamp.between(start_date, end_date)
-    )
-    
-    # Apply folder filter to time-based scans if specified
-    if folder and folder.lower() != 'all qrcodes':
-        scans_query = scans_query.join(QRCode).filter(QRCode.folder == folder)
-    
-    # Execute the query
-    scans_data = scans_query.group_by(date_trunc).order_by(date_trunc).all()
-    
-    # Convert to list of dicts for JSON serialization
-    scans = [{
-        'date': str(scan.date) if not isinstance(scan.date, str) else scan.date,
-        'count': scan.count
-    } for scan in scans_data]
-    
-    response = {
-        'total_qrcodes': total_qrcodes,
-        'total_scans': total_scans,
-        'scans': scans,
-        'time_range': {
-            'start': start_date.isoformat(),
-            'end': end_date.isoformat(),
-            'group_by': group_by,
-            'date_format': date_format
-        },
-        'folder': folder or 'All QR Codes'
-    }
-    
-    # If it's an API call, return JSON
-    if request.path == '/api/stats/dashboard':
+    try:
+        # Get query parameters
+        folder = request.args.get('folder')
+        time_range = request.args.get('time_range', '30d')  # Default to 30 days
+        
+        app.logger.info(f"Fetching dashboard stats for folder: {folder}, time_range: {time_range}")
+        
+        # Parse the time range
+        start_date, end_date, group_by, date_format = get_date_range(time_range)
+        
+        app.logger.info(f"Date range: {start_date} to {end_date}, group_by: {group_by}")
+        
+        # Base query for QR codes - filter out folder placeholders
+        qrcode_query = QRCode.query.filter(
+            QRCode.target_url != '#'  # Filter out dummy folder entries
+        )
+        
+        # Apply folder filter if specified
+        if folder and folder.lower() != 'all qrcodes':
+            qrcode_query = qrcode_query.filter(QRCode.folder == folder)
+        
+        # Get total number of QR codes (excluding folder placeholders)
+        total_qrcodes = qrcode_query.count()
+        app.logger.info(f"Total QR codes (excluding folders): {total_qrcodes}")
+        
+        # Base query for scans - only include basic fields that definitely exist
+        scan_query = db.session.query(Scan.id, Scan.timestamp, Scan.qr_code_id)
+        
+        # Filter by time range
+        scan_query = scan_query.filter(Scan.timestamp.between(start_date, end_date))
+        
+        # Apply folder filter to scans if specified
+        if folder and folder.lower() != 'all qrcodes':
+            scan_query = scan_query.join(QRCode).filter(QRCode.folder == folder)
+        
+        # Get total number of scans in the selected time range
+        total_scans = scan_query.count()
+        
+        # Base query for time-based scans - using SQLite compatible date functions
+        if group_by == 'hour':
+            date_trunc = db.func.strftime('%Y-%m-%d %H:00:00', Scan.timestamp)
+        elif group_by == 'day':
+            date_trunc = db.func.date(Scan.timestamp)
+        else:  # month
+            date_trunc = db.func.strftime('%Y-%m-01', Scan.timestamp)
+        
+        # Create a subquery with just the basic fields we need
+        subq = db.session.query(
+            Scan.id,
+            Scan.timestamp,
+            Scan.qr_code_id,
+            date_trunc.label('date_group')
+        ).filter(
+            Scan.timestamp.between(start_date, end_date)
+        ).subquery()
+        
+        # Get scan counts by time period
+        scans_query = db.session.query(
+            subq.c.date_group.label('date'),
+            db.func.count(subq.c.id).label('count')
+        ).group_by('date_group').order_by('date_group')
+        
+        # Apply folder filter to time-based scans if specified
+        if folder and folder.lower() != 'all qrcodes':
+            scans_query = scans_query.join(QRCode, subq.c.qr_code_id == QRCode.id)
+            scans_query = scans_query.filter(QRCode.folder == folder)
+        
+        # Execute the query
+        scans_data = scans_query.all()
+        
+        # Convert to list of dicts for JSON serialization
+        scans = [{
+            'date': str(scan.date) if not isinstance(scan.date, str) else scan.date,
+            'count': scan.count
+        } for scan in scans_data]
+        
+        response = {
+            'total_qrcodes': total_qrcodes,
+            'total_scans': total_scans,
+            'scans': scans,
+            'time_range': {
+                'start': start_date.isoformat() if hasattr(start_date, 'isoformat') else str(start_date),
+                'end': end_date.isoformat() if hasattr(end_date, 'isoformat') else str(end_date),
+                'group_by': group_by,
+                'date_format': date_format
+            },
+            'folder': folder or 'All QR Codes'
+        }
+        
+        app.logger.info(f"Successfully fetched dashboard stats. QR Codes: {total_qrcodes}, Scans: {total_scans}")
         return jsonify(response)
-    
-    # If called internally, return the dict
-    return response
+        
+    except Exception as e:
+        app.logger.error(f"Error in get_dashboard_stats: {str(e)}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to fetch dashboard stats',
+            'details': str(e)
+        }), 500
 
 @app.route('/api/stats/daily-scans', methods=['GET'])
 def get_daily_scan_stats():
@@ -545,6 +694,119 @@ def get_daily_scan_stats():
         'total_scans': sum(scan.count for scan in daily_scans),
         'total_qrcodes': QRCode.query.count()
     })
+
+@app.route('/api/qrcodes/<int:qrcode_id>/enhanced-stats', methods=['GET'])
+def get_enhanced_qrcode_stats(qrcode_id):
+    try:
+        qr = QRCode.query.get_or_404(qrcode_id)
+        
+        # Initialize stats with default values
+        stats = {
+            'total_scans': 0,
+            'scans_by_country': {},
+            'scans_by_device': {},
+            'scans_by_os': {},
+            'scans_by_browser': {},
+            'scans_by_hour': {str(h).zfill(2): 0 for h in range(24)},
+            'scans_by_weekday': {i: 0 for i in range(7)},
+            'avg_time_on_page': 0,
+            'scroll_rate': 0,
+            'top_referrers': {}
+        }
+        
+        # Get basic scan count using a simple query
+        scan_count = db.session.query(Scan.id).filter(Scan.qr_code_id == qrcode_id).count()
+        stats['total_scans'] = scan_count
+        
+        if scan_count == 0:
+            return jsonify(stats)
+            
+        # Get scan data with only the fields we need
+        scans = db.session.query(
+            Scan.timestamp,
+            getattr(Scan, 'country', None).label('country'),
+            getattr(Scan, 'region', None).label('region'),
+            getattr(Scan, 'city', None).label('city'),
+            getattr(Scan, 'timezone', None).label('timezone'),
+            getattr(Scan, 'device_type', None).label('device_type'),
+            getattr(Scan, 'os_family', None).label('os_family'),
+            getattr(Scan, 'browser_family', None).label('browser_family'),
+            getattr(Scan, 'referrer_domain', None).label('referrer_domain'),
+            getattr(Scan, 'time_on_page', None).label('time_on_page'),
+            getattr(Scan, 'scrolled', None).label('scrolled'),
+            getattr(Scan, 'scan_method', None).label('scan_method')
+        ).filter(Scan.qr_code_id == qrcode_id).all()
+        
+        # Calculate time-based stats
+        time_on_page_total = 0
+        time_on_page_count = 0
+        scrolled_count = 0
+        
+        for scan in scans:
+            # Country stats
+            if hasattr(scan, 'country') and scan.country:
+                stats['scans_by_country'][scan.country] = stats['scans_by_country'].get(scan.country, 0) + 1
+            
+            # Device stats
+            if hasattr(scan, 'device_type') and scan.device_type:
+                stats['scans_by_device'][scan.device_type] = stats['scans_by_device'].get(scan.device_type, 0) + 1
+            
+            # OS stats
+            if hasattr(scan, 'os_family') and scan.os_family:
+                stats['scans_by_os'][scan.os_family] = stats['scans_by_os'].get(scan.os_family, 0) + 1
+            
+            # Browser stats
+            if hasattr(scan, 'browser_family') and scan.browser_family:
+                stats['scans_by_browser'][scan.browser_family] = stats['scans_by_browser'].get(scan.browser_family, 0) + 1
+            
+            # Time-based stats
+            if scan.timestamp:
+                stats['scans_by_hour'][str(scan.timestamp.hour).zfill(2)] += 1
+                stats['scans_by_weekday'][scan.timestamp.weekday()] += 1
+            
+            # Interaction stats
+            if hasattr(scan, 'time_on_page') and scan.time_on_page is not None:
+                time_on_page_total += scan.time_on_page
+                time_on_page_count += 1
+            
+            if hasattr(scan, 'scrolled') and scan.scrolled:
+                scrolled_count += 1
+                
+            # Referrer stats
+            if hasattr(scan, 'referrer_domain') and scan.referrer_domain:
+                stats['top_referrers'][scan.referrer_domain] = stats['top_referrers'].get(scan.referrer_domain, 0) + 1
+        
+        # Calculate averages
+        if time_on_page_count > 0:
+            stats['avg_time_on_page'] = round(time_on_page_total / time_on_page_count, 2)
+        
+        if scans:
+            stats['scroll_rate'] = round((scrolled_count / len(scans)) * 100, 2)
+        
+        # Sort and limit top referrers
+        stats['top_referrers'] = dict(sorted(
+            stats['top_referrers'].items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        )[:10])  # Top 10 referrers
+        
+        return jsonify(stats)
+        
+    except Exception as e:
+        # If there's an error, return a basic response
+        return jsonify({
+            'total_scans': 0,
+            'scans_by_country': {},
+            'scans_by_device': {},
+            'scans_by_os': {},
+            'scans_by_browser': {},
+            'scans_by_hour': {},
+            'scans_by_weekday': {},
+            'avg_time_on_page': 0,
+            'scroll_rate': 0,
+            'top_referrers': {},
+            'error': str(e)
+        }), 200
 
 if __name__ == '__main__':
     with app.app_context():

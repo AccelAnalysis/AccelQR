@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
@@ -20,8 +20,7 @@ import {
   FormHelperText
 } from '@chakra-ui/react';
 import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+import { ENDPOINTS } from '../config';
 
 const QRCodeGenerator = () => {
   const [formData, setFormData] = useState({
@@ -43,27 +42,27 @@ const QRCodeGenerator = () => {
   const toast = useToast();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchFolders = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/folders`);
-        setFolders(response.data);
-      } catch (error) {
-        console.error('Error fetching folders:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load folders',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      } finally {
-        setIsLoadingFolders(false);
-      }
-    };
+  const fetchFolders = useCallback(async () => {
+    try {
+      const response = await axios.get(ENDPOINTS.FOLDERS);
+      setFolders(response.data);
+      setIsLoadingFolders(false);
+    } catch (error) {
+      console.error('Error fetching folders:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load folders',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+      setIsLoadingFolders(false);
+    }
+  }, [toast]);
 
+  useEffect(() => {
     fetchFolders();
-  }, []);
+  }, [fetchFolders]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -75,45 +74,40 @@ const QRCodeGenerator = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     
     if (!formData.name || !formData.target_url) {
       toast({
         title: 'Error',
-        description: 'Please fill in all required fields',
+        description: 'Name and Target URL are required',
         status: 'error',
         duration: 5000,
         isClosable: true,
       });
+      setLoading(false);
       return;
     }
-
-    setLoading(true);
     
     try {
-      const response = await axios.post(`${API_URL}/qrcodes`, {
-        name: formData.name,
-        target_url: formData.target_url,
-        description: formData.description,
+      const response = await axios.post(ENDPOINTS.QR_CODES, {
+        ...formData,
         folder: formData.folder || null
       });
-
-      // Get the local IP address for the QR code
-      const localIp = window.location.hostname === 'localhost' ? '10.255.161.20' : window.location.hostname;
       
       setGeneratedQR({
         id: response.data.id,
         short_code: response.data.short_code,
-        image_url: `http://${localIp}:5001/api/qrcodes/${response.data.short_code}/image`
+        image_url: response.data.image_url
       });
-
+      
       toast({
         title: 'Success',
-        description: 'QR Code generated successfully!',
+        description: 'QR Code generated successfully',
         status: 'success',
         duration: 5000,
         isClosable: true,
       });
-
+      
       // Reset form
       setFormData({
         name: '',
@@ -121,11 +115,12 @@ const QRCodeGenerator = () => {
         description: '',
         folder: ''
       });
+      
     } catch (error) {
       console.error('Error generating QR code:', error);
       toast({
         title: 'Error',
-        description: 'Failed to generate QR code. Please try again.',
+        description: 'Failed to generate QR code',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -135,77 +130,55 @@ const QRCodeGenerator = () => {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: 'Copied!',
-      status: 'success',
-      duration: 2000,
-      isClosable: true,
-    });
-  };
-
-  const downloadQRCode = () => {
-    if (!generatedQR) return;
-    
-    const link = document.createElement('a');
-    link.href = generatedQR.image_url;
-    link.download = `qrcode-${generatedQR.short_code}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   return (
-    <Box maxW="3xl" mx="auto">
-      <Heading size="lg" mb={6}>Create New AccelQR Code</Heading>
+    <Box p={4}>
+      <Heading as="h1" size="xl" mb={6}>Generate New QR Code</Heading>
       
-      <Card variant="outline" mb={8}>
+      <Card maxW="800px" mx="auto">
         <CardHeader>
           <Heading size="md">QR Code Details</Heading>
         </CardHeader>
         <CardBody>
           <form onSubmit={handleSubmit}>
-            <VStack spacing={6}>
+            <VStack spacing={4}>
               <FormControl isRequired>
-                <FormLabel>QR Code Name</FormLabel>
+                <FormLabel>Name</FormLabel>
                 <Input
-                  type="text"
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  placeholder="e.g., My Website"
+                  placeholder="Enter a name for this QR code"
                 />
               </FormControl>
               
               <FormControl isRequired>
-                <FormLabel>Destination URL</FormLabel>
+                <FormLabel>Target URL</FormLabel>
                 <Input
-                  type="url"
                   name="target_url"
+                  type="url"
                   value={formData.target_url}
                   onChange={handleChange}
                   placeholder="https://example.com"
                 />
               </FormControl>
               
-              <FormControl id="description" mb={6}>
-                <FormLabel>Description (optional)</FormLabel>
+              <FormControl>
+                <FormLabel>Description</FormLabel>
                 <Textarea
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
-                  placeholder="Enter a description for this QR code"
+                  placeholder="Enter a description (optional)"
                 />
               </FormControl>
               
-              <FormControl id="folder" mb={6}>
-                <FormLabel>Folder (optional)</FormLabel>
+              <FormControl>
+                <FormLabel>Folder</FormLabel>
                 <Select
                   name="folder"
                   value={formData.folder}
                   onChange={handleChange}
-                  placeholder="Select a folder"
+                  placeholder="Select a folder (optional)"
                   isDisabled={isLoadingFolders}
                 >
                   {folders.map((folder) => (
@@ -214,89 +187,73 @@ const QRCodeGenerator = () => {
                     </option>
                   ))}
                 </Select>
-                <FormHelperText>
-                  Select an existing folder or leave empty to create a new one
-                </FormHelperText>
+                {isLoadingFolders && (
+                  <FormHelperText>Loading folders...</FormHelperText>
+                )}
               </FormControl>
-              
-              {!isLoadingFolders && !folders.some(f => f === formData.folder) && formData.folder && (
-                <FormControl id="newFolder" mb={6}>
-                  <FormLabel>New Folder Name</FormLabel>
-                  <Input
-                    value={formData.folder}
-                    onChange={(e) => setFormData(prev => ({ ...prev, folder: e.target.value }))}
-                    placeholder="Enter a name for the new folder"
-                  />
-                </FormControl>
-              )}
               
               <Button
                 type="submit"
-                colorScheme="teal"
-                size="lg"
-                width="full"
+                colorScheme="blue"
                 isLoading={loading}
                 loadingText="Generating..."
+                mt={4}
               >
                 Generate QR Code
               </Button>
             </VStack>
           </form>
-        </CardBody>
-      </Card>
-
-      {generatedQR && (
-        <Card variant="outline">
-          <CardHeader>
-            <Heading size="md">Your QR Code is Ready!</Heading>
-          </CardHeader>
-          <CardBody>
-            <VStack spacing={6}>
-              <Box p={4} borderWidth={1} borderRadius="md">
+          
+          {generatedQR && (
+            <Box mt={8}>
+              <Heading size="md" mb={4}>QR Code Generated Successfully!</Heading>
+              <VStack spacing={4} align="center">
                 <Image
                   src={generatedQR.image_url}
                   alt={`QR Code for ${formData.name}`}
                   boxSize="200px"
-                  mx="auto"
                 />
-              </Box>
-              
-              <VStack spacing={2} w="full">
-                <Text fontWeight="medium">Short URL:</Text>
-                <HStack w="full">
-                  <Input
-                    value={`${window.location.origin}/r/${generatedQR.short_code}`}
-                    isReadOnly
-                    pr="4.5rem"
-                  />
+                <Text>Scan this QR code or share the link below:</Text>
+                <Box 
+                  p={3} 
+                  bg="gray.100" 
+                  borderRadius="md" 
+                  w="100%" 
+                  textAlign="center"
+                  fontFamily="mono"
+                >
+                  {window.location.origin}/r/{generatedQR.short_code}
+                </Box>
+                <HStack spacing={4} mt={4}>
                   <Button
-                    onClick={() => copyToClipboard(`${window.location.origin}/r/${generatedQR.short_code}`)}
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `${window.location.origin}/r/${generatedQR.short_code}`
+                      );
+                      toast({
+                        title: 'Copied!',
+                        status: 'success',
+                        duration: 2000,
+                        isClosable: true,
+                      });
+                    }}
                   >
-                    Copy
+                    Copy Link
+                  </Button>
+                  <Button
+                    colorScheme="blue"
+                    onClick={() => {
+                      window.open(`/dashboard/qrcodes/${generatedQR.id}`, '_blank');
+                    }}
+                  >
+                    View Details
                   </Button>
                 </HStack>
               </VStack>
-              
-              <HStack spacing={4} w="full">
-                <Button
-                  onClick={downloadQRCode}
-                  leftIcon={<i className="fas fa-download"></i>}
-                  flex={1}
-                >
-                  Download QR Code
-                </Button>
-                <Button
-                  onClick={() => navigate(`/qrcodes/${generatedQR.id}`)}
-                  variant="outline"
-                  flex={1}
-                >
-                  View Analytics
-                </Button>
-              </HStack>
-            </VStack>
-          </CardBody>
-        </Card>
-      )}
+            </Box>
+          )}
+        </CardBody>
+      </Card>
     </Box>
   );
 };

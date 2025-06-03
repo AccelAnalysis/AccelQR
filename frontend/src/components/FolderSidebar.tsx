@@ -28,8 +28,8 @@ import {
   FiEdit2, 
   FiTrash2,
   FiCheck,
-  FiXCircle
-} from 'react-icons/fi';
+  FiX
+} from 'react-icons/fi'; // Changed FiXCircle to FiX
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
@@ -113,7 +113,7 @@ const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRen
                 />
                 <IconButton
                   aria-label="Cancel"
-                  icon={<FiXCircle />}
+                  icon={<FiX />}
                   size="xs"
                   variant="ghost"
                   onClick={() => {
@@ -199,7 +199,9 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
   const fetchFolders = async () => {
     try {
       const response = await axios.get(`${API_URL}/folders`);
-      setFolders(response.data);
+      // Filter out any null or empty folder names
+      const validFolders = response.data.filter((folder: string | null) => folder && folder.trim() !== '');
+      setFolders(validFolders);
     } catch (error) {
       console.error('Error fetching folders:', error);
       toast({

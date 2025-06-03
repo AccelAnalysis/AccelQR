@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Box, 
   Heading, 
@@ -29,6 +29,14 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import axios from 'axios';
 import FolderSidebar from '../components/FolderSidebar';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const ENDPOINTS = {
+  QR_CODES: `${API_URL}/qrcodes`,
+  FOLDERS: `${API_URL}/folders`,
+  STATS: `${API_URL}/stats`,
+  STATS_DASHBOARD: `${API_URL}/stats/dashboard`
+};
+
 interface QRCode {
   id: number;
   name: string;
@@ -58,7 +66,6 @@ interface DashboardStats {
   time_range: TimeRange;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 const Dashboard = () => {
   const [qrcodes, setQRCodes] = useState<QRCode[]>([]);
@@ -82,7 +89,8 @@ const Dashboard = () => {
   ];
 
   // Format number with commas
-  const formatNumber = (num: number) => {
+  const formatNumber = (num: number | null | undefined) => {
+    if (num === null || num === undefined) return '0';
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
@@ -98,7 +106,7 @@ const Dashboard = () => {
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
-  const fetchDashboardStats = async (folder: string | null = null, range: string = '30d') => {
+  const fetchDashboardStats = useCallback(async (folder: string | null = null, range: string = '30d') => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -108,7 +116,7 @@ const Dashboard = () => {
       params.append('time_range', range);
       
       console.log('Fetching dashboard stats with params:', params.toString());
-      const response = await axios.get(`${API_URL}/stats/dashboard?${params.toString()}`);
+      const response = await axios.get(ENDPOINTS.STATS_DASHBOARD, { params });
       console.log('Received dashboard stats:', response.data);
       
       // Validate the data structure
@@ -120,6 +128,7 @@ const Dashboard = () => {
       }
       
       setDashboardStats(response.data);
+      return response.data;
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
       toast({
@@ -129,22 +138,31 @@ const Dashboard = () => {
         duration: 5000,
         isClosable: true,
       });
+      return null;
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, setLoading, setDashboardStats]);
   
-  const handleTimeRangeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleTimeRangeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const newRange = e.target.value;
     setTimeRange(newRange);
     fetchDashboardStats(activeFolder, newRange);
-  };
+  }, [fetchDashboardStats, activeFolder]);
 
-  const fetchQRCodes = async (folder: string | null = null) => {
+  const fetchQRCodes = useCallback(async (folder: string | null = null) => {
     try {
-      const params = folder ? { folder } : {};
-      const response = await axios.get(`${API_URL}/qrcodes`, { params });
-      setQRCodes(response.data);
+      setLoading(true);
+      // First, fetch all QR codes (filtering is now done on the frontend)
+      const response = await axios.get(ENDPOINTS.QR_CODES);
+      
+      // Filter QR codes by folder if one is selected
+      let filteredQRCodes = response.data;
+      if (folder) {
+        filteredQRCodes = response.data.filter((qr: QRCode) => qr.folder === folder);
+      }
+      
+      setQRCodes(filteredQRCodes);
     } catch (error) {
       console.error('Error fetching QR codes:', error);
       toast({
@@ -157,21 +175,27 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setQRCodes, setLoading, toast]);
 
   // Handle folder selection
-  const handleFolderSelect = (folder: string | null) => {
+  const handleFolderSelect = async (folder: string | null) => {
     setActiveFolder(folder);
-    fetchQRCodes(folder === 'Uncategorized' ? 'Uncategorized' : folder || undefined);
-    fetchDashboardStats(folder);
+    // Refresh the QR codes for the selected folder
+    await fetchQRCodes(folder);
+    // Update the dashboard stats for the selected folder
+    fetchDashboardStats(folder, timeRange);
   };
 
-  // Initial data fetch
+  // Fetch QR codes on component mount or when active folder changes
   useEffect(() => {
-    fetchQRCodes(activeFolder);
-    fetchDashboardStats(activeFolder, timeRange);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFolder, timeRange]);
+    const loadData = async () => {
+      await Promise.all([
+        fetchDashboardStats(activeFolder, timeRange),
+        fetchQRCodes(activeFolder)
+      ]);
+    };
+    loadData();
+  }, [activeFolder, timeRange, fetchDashboardStats, fetchQRCodes]);
 
   const refreshData = () => {
     fetchQRCodes(activeFolder);
@@ -187,7 +211,7 @@ const Dashboard = () => {
       }
       params.append('time_range', timeRange);
       
-      const response = await fetch(`${API_URL}/stats/dashboard/export?${params.toString()}`);
+      const response = await fetch(`${ENDPOINTS.STATS_DASHBOARD}/export?${params.toString()}`);
       
       if (!response.ok) {
         throw new Error('Failed to export data');
