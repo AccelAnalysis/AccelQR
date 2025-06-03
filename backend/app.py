@@ -26,13 +26,39 @@ def health_check():
         'service': 'qr-tracker-backend'
     }), 200
 
-# Configure CORS to allow all origins for development
+@app.route('/api/test-db', methods=['GET'])
+def test_db():
+    """Test database connection and return status"""
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        return jsonify({
+            'status': 'success',
+            'message': 'Database connection successful',
+            'database': app.config['SQLALCHEMY_DATABASE_URI'].split('@')[-1] if app.config['SQLALCHEMY_DATABASE_URI'] else 'Not configured',
+            'tables_exist': 'qrcodes' in db.engine.table_names()
+        }), 200
+    except Exception as e:
+        app.logger.error(f"Database connection failed: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'database': app.config['SQLALCHEMY_DATABASE_URI'].split('@')[-1] if app.config['SQLALCHEMY_DATABASE_URI'] else 'Not configured'
+        }), 500
+
+# Configure CORS with specific allowed origins
+allowed_origins = [
+    "https://accelqr-1.onrender.com",  # Production frontend
+    "http://localhost:5173",           # Local development
+    "http://127.0.0.1:5173"            # Local development alternative
+]
+
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["*"],  # Allow all origins for development
+        "origins": allowed_origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        "allow_headers": ["*"],
-        "expose_headers": ["*"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "expose_headers": ["Content-Range", "X-Total-Count"],
         "supports_credentials": True
     }
 })
