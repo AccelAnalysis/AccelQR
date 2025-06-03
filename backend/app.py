@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timedelta
 from io import BytesIO
-from flask import Flask, request, jsonify, send_file, make_response
+from flask import Flask, request, jsonify, send_file, make_response, redirect
 from sqlalchemy import text
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -12,6 +12,8 @@ import geoip2.database
 import geoip2.errors
 from user_agents import parse
 from typing import Dict, Optional
+import requests  # For IP geolocation
+from urllib.parse import urlparse
 
 # Load environment variables
 load_dotenv()
@@ -181,6 +183,36 @@ class Scan(db.Model):
     time_on_page = db.Column(db.Integer)  # in seconds
     scrolled = db.Column(db.Boolean, default=False)
     scan_method = db.Column(db.String(50))  # camera, image_upload, etc.
+
+def get_geographic_data(ip_address):
+    """Get geographic data from IP address"""
+    if ip_address == '127.0.0.1':
+        return {
+            'country': 'Local',
+            'region': 'Development',
+            'city': 'Localhost',
+            'timezone': 'UTC'
+        }
+    
+    try:
+        response = requests.get(f'http://ip-api.com/json/{ip_address}')
+        data = response.json()
+        if data['status'] == 'success':
+            return {
+                'country': data.get('country', 'Unknown'),
+                'region': data.get('regionName', 'Unknown'),
+                'city': data.get('city', 'Unknown'),
+                'timezone': data.get('timezone', 'UTC')
+            }
+    except Exception as e:
+        print(f"Error getting geolocation: {e}")
+    
+    return {
+        'country': 'Unknown',
+        'region': 'Unknown',
+        'city': 'Unknown',
+        'timezone': 'UTC'
+    }
 
 @app.route('/api/qrcodes', methods=['POST'])
 def create_qrcode():
@@ -527,12 +559,14 @@ def redirect_short_code(short_code):
     referrer = request.referrer
     referrer_domain = None
     if referrer:
-        from urllib.parse import urlparse
         parsed_uri = urlparse(referrer)
         referrer_domain = parsed_uri.netloc
     
     # Parse user agent
     user_agent_data = parse(request.user_agent.string)
+    
+    # Get geographic data
+    geo_data = get_geographic_data(request.remote_addr)
     
     # Create scan record with enhanced data
     scan = Scan(
@@ -546,7 +580,10 @@ def redirect_short_code(short_code):
                    'desktop' if user_agent_data.is_pc else 'other',
         os_family=user_agent_data.os.family,
         browser_family=user_agent_data.browser.family,
-        **get_geographic_data(request.remote_addr)
+        country=geo_data['country'],
+        region=geo_data['region'],
+        city=geo_data['city'],
+        timezone=geo_data['timezone']
     )
     
     db.session.add(scan)
@@ -559,21 +596,8 @@ def redirect_short_code(short_code):
     else:
         redirect_url += f'?scan_id={scan.id}'
     
-    return f'''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta http-equiv="refresh" content="0;url={qr.target_url}" />
-        <title>Redirecting...</title>
-    </head>
-    <body>
-        <p>Redirecting to <a href="{qr.target_url}">{qr.target_url}</a>...</p>
-        <script>
-            window.location.href = "{qr.target_url}";
-        </script>
-    </body>
-    </html>
-    '''
+    # Redirect directly instead of using HTML meta refresh
+    return redirect(redirect_url, code=302)
 
 def get_date_range(time_range):
     try:
