@@ -24,7 +24,17 @@ def health_check():
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.utcnow().isoformat(),
-        'service': 'qr-tracker-backend'
+        'service': 'qr-tracker-backend',
+        'database': app.config.get('SQLALCHEMY_DATABASE_URI', 'not configured').split('@')[-1] if 'SQLALCHEMY_DATABASE_URI' in app.config else 'not configured'
+    }), 200
+
+@app.route('/api/db-config', methods=['GET'])
+def db_config():
+    """Endpoint to verify database configuration"""
+    return jsonify({
+        'database_url': app.config.get('SQLALCHEMY_DATABASE_URI', 'not configured'),
+        'database_type': 'postgresql' if 'postgresql' in app.config.get('SQLALCHEMY_DATABASE_URI', '').lower() else 'sqlite',
+        'tables_created': 'qrcodes' in [table.name for table in db.metadata.sorted_tables]
     }), 200
 
 @app.route('/api/test-db', methods=['GET'])
@@ -76,15 +86,21 @@ CORS(app, resources={
 
 # Configure SQLAlchemy
 uri = os.getenv('DATABASE_URL')
+print(f"DATABASE_URL from environment: {uri}")
+
 if not uri:
     # Fallback to SQLite for local development
     os.makedirs('instance', exist_ok=True)
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(os.getcwd(), "instance/qrcodes.db")}'
+    print("Using SQLite database")
 else:
     # Handle PostgreSQL URL (Render provides DATABASE_URL)
     if uri.startswith('postgres://'):
         uri = uri.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = uri
+    print(f"Using PostgreSQL database: {uri}")
+
+app.logger.info(f"Final database URL: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
