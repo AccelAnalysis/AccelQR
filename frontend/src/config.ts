@@ -1,5 +1,5 @@
 // API Configuration
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+export const API_URL = import.meta.env.VITE_API_URL || 'https://accelqr.onrender.com/api';
 
 // Other API endpoints
 export const ENDPOINTS = {

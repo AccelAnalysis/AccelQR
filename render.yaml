@@ -1,4 +1,5 @@
 services:
+  # Backend service
   - type: web
     name: qr-tracker-backend
     env: python
@@ -24,48 +25,17 @@ services:
           name: qr-tracker-db
           property: connectionString
 
+  # Frontend service
   - type: web
     name: qr-tracker-frontend
     env: node
-    buildCommand: npm install && npm run build
+    buildCommand: |
+      npm install
+      VITE_API_URL=https://accelqr.onrender.com/api npm run build
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL
         value: https://accelqr.onrender.com/api
-
-# Database configuration
-databases:
-  - name: qr-tracker-db
-    databaseName: qrtracker
-    user: qrtracker
-    plan: freeservices:
-  - type: web
-    name: qr-tracker-backend
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.9.0
-      - key: FLASK_APP
-        value: app.py
-      - key: FLASK_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: qr-tracker-db
-          property: connectionString
-      # Add other environment variables here as needed
-
-  - type: web
-    name: qr-tracker-frontend
-    env: node
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
-    envVars:
-      - key: VITE_API_URL
-        value: https://accelqr.onrender.com/api
-      # Add other frontend environment variables here
 
 # Database configuration
 databases:
