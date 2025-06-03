@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta
 from io import BytesIO
 from flask import Flask, request, jsonify, send_file, make_response
+from sqlalchemy import text
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
@@ -31,12 +32,22 @@ def test_db():
     """Test database connection and return status"""
     try:
         # Test database connection
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
+        
+        # Get database info
+        db_url = app.config['SQLALCHEMY_DATABASE_URI']
+        db_display = db_url.split('@')[-1] if db_url and '@' in db_url else db_url
+        
+        # Check if tables exist
+        inspector = db.inspect(db.engine)
+        tables_exist = 'qrcodes' in inspector.get_table_names()
+        
         return jsonify({
             'status': 'success',
             'message': 'Database connection successful',
-            'database': app.config['SQLALCHEMY_DATABASE_URI'].split('@')[-1] if app.config['SQLALCHEMY_DATABASE_URI'] else 'Not configured',
-            'tables_exist': 'qrcodes' in db.engine.table_names()
+            'database': db_display or 'Not configured',
+            'tables_exist': tables_exist,
+            'tables': inspector.get_table_names()
         }), 200
     except Exception as e:
         app.logger.error(f"Database connection failed: {str(e)}")
