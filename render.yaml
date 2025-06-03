@@ -24,10 +24,6 @@ services:
         fromDatabase:
           name: qr-tracker-db
           property: connectionString
-      - key: SQLALCHEMY_DATABASE_URI
-        fromDatabase:
-          name: qr-tracker-db
-          property: connectionString
 
   # Frontend service
   - type: web

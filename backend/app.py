@@ -85,25 +85,22 @@ CORS(app, resources={
 })
 
 # Configure SQLAlchemy
-# First check for SQLALCHEMY_DATABASE_URI, then DATABASE_URL
-uri = os.getenv('SQLALCHEMY_DATABASE_URI') or os.getenv('DATABASE_URL')
-print(f"Database URI from environment: {uri}")
+uri = os.getenv('DATABASE_URL')
+print(f"DATABASE_URL from environment: {uri}")
 
 if not uri:
     # Fallback to SQLite for local development
     os.makedirs('instance', exist_ok=True)
-    db_uri = f'sqlite:///{os.path.join(os.getcwd(), "instance/qrcodes.db")}'
-    print("Using SQLite database (fallback)")
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(os.getcwd(), "instance/qrcodes.db")}'
+    print("Using SQLite database")
 else:
     # Handle PostgreSQL URL (Render provides DATABASE_URL)
     if uri.startswith('postgres://'):
         uri = uri.replace('postgres://', 'postgresql://', 1)
-    db_uri = uri
-    print(f"Using database: {db_uri}")
+    app.config['SQLALCHEMY_DATABASE_URI'] = uri
+    print(f"Using PostgreSQL database: {uri}")
 
-app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
-app.logger.info(f"Final database URL: {db_uri}")
-
+app.logger.info(f"Final database URL: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
