@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
   Heading, 
@@ -40,7 +39,6 @@ const QRCodeGenerator = () => {
   } | null>(null);
   
   const toast = useToast();
-  const navigate = useNavigate();
 
   const fetchFolders = useCallback(async () => {
     try {
