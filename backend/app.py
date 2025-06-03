@@ -88,17 +88,17 @@ CORS(app, resources={
 uri = os.getenv('DATABASE_URL')
 print(f"DATABASE_URL from environment: {uri}")
 
-if not uri:
-    # Fallback to SQLite for local development
-    os.makedirs('instance', exist_ok=True)
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(os.getcwd(), "instance/qrcodes.db")}'
-    print("Using SQLite database")
-else:
+if uri:
     # Handle PostgreSQL URL (Render provides DATABASE_URL)
     if uri.startswith('postgres://'):
         uri = uri.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = uri
     print(f"Using PostgreSQL database: {uri}")
+else:
+    # Fallback to SQLite for local development
+    os.makedirs('instance', exist_ok=True)
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(os.getcwd(), "instance/qrcodes.db")}'
+    print("Using SQLite database")
 
 app.logger.info(f"Final database URL: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
@@ -112,12 +112,42 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-# Ensure tables are created
-try:
+def init_db():
+    """Initialize the database and create tables"""
     with app.app_context():
+        try:
+            print("Creating database tables...")
+            db.create_all()
+            print("Database tables created successfully")
+            # Verify tables were created
+            inspector = db.inspect(db.engine)
+            tables = inspector.get_table_names()
+            print(f"Tables in database: {tables}")
+        except Exception as e:
+            print(f"Error creating database tables: {e}")
+            raise
+
+# Initialize database on startup
+init_db()
+
+# Add a route to manually trigger table creation
+@app.route('/api/create-tables', methods=['POST'])
+def create_tables():
+    """Manually trigger table creation"""
+    try:
         db.create_all()
-except Exception as e:
-    print(f"Error creating database tables: {e}")
+        return jsonify({
+            'status': 'success',
+            'message': 'Database tables created successfully',
+            'tables': db.inspect(db.engine).get_table_names()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Error creating tables: {str(e)}'
+        }), 500
+
+# Database tables are now created by init_db()
 
 class QRCode(db.Model):
     __tablename__ = 'qrcodes'
