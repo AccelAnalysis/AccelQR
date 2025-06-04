@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Box, 
@@ -610,13 +611,13 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                                   </Td>
                                 </Tr>
                                 {Object.entries(locations)
-                                  .sort((a: any, b: any) => b[1] - a[1])
-                                  .map(([location, locationCount]: [string, number]) => (
+                                  .sort((a, b) => (b[1] as number) - (a[1] as number))
+                                  .map(([location, locationCount]) => (
                                     <Tr key={`${country}-${location}`}>
                                       <Td pl={8} fontStyle="italic">
                                         {location}
                                       </Td>
-                                      <Td isNumeric>{locationCount}</Td>
+                                      <Td isNumeric>{locationCount as number}</Td>
                                     </Tr>
                                   ))}
                               </React.Fragment>
