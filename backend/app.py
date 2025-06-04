@@ -532,13 +532,11 @@ def get_qrcode_stats(qrcode_id=None, short_code=None):
 def get_qrcode_image(short_code):
     qr = QRCode.query.filter_by(short_code=short_code).first_or_404()
     
-    # Get the local IP address
-    import socket
-    hostname = socket.gethostname()
-    local_ip = socket.gethostbyname(hostname)
+    # Use production URL for the QR code
+    production_url = 'https://accelqr-1.onrender.com'
     
-    # Generate QR code with the local IP
-    img = qrcode.make(f'http://{local_ip}:5001/r/{short_code}')
+    # Generate QR code with the production URL
+    img = qrcode.make(f'{production_url}/r/{short_code}')
     img_io = BytesIO()
     img.save(img_io, 'PNG')
     img_io.seek(0)
