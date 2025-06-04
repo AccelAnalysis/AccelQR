@@ -294,7 +294,8 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
   }
 
   return (
-    <Box p={4} maxW="1400px" mx="auto">
+    <Box minH="100vh" p={{ base: 4, md: 6 }}>
+      <Box maxW="1400px" mx="auto" h="100%">
       <Button 
         leftIcon={<FiArrowLeft />} 
         variant="ghost" 
@@ -365,7 +366,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
           </HStack>
         </CardHeader>
         <CardBody>
-          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
+          <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
             <Box>
               <Box 
                 as="img"
@@ -498,18 +499,27 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
         mb={6}
         index={tabIndex}
         onChange={(index) => setTabIndex(index as number)}
+        isFitted
+        isLazy
+        w="100%"
+        overflowX="auto"
       >
-        <TabList>
-          <Tab><FiBarChart2 style={{ marginRight: '8px' }} /> Overview</Tab>
-          <Tab><FiGlobe style={{ marginRight: '8px' }} /> Locations</Tab>
-          <Tab><FiSmartphone style={{ marginRight: '8px' }} /> Devices</Tab>
-          <Tab><FiClock style={{ marginRight: '8px' }} /> Engagement</Tab>
+        <TabList overflowX="auto" overflowY="hidden" pb={1} w="max-content" minW="100%">
+          <Tab whiteSpace="nowrap" minW="max-content" px={4}><FiBarChart2 style={{ marginRight: '8px' }} /> Overview</Tab>
+          <Tab whiteSpace="nowrap" minW="max-content" px={4}><FiGlobe style={{ marginRight: '8px' }} /> Locations</Tab>
+          <Tab whiteSpace="nowrap" minW="max-content" px={4}><FiSmartphone style={{ marginRight: '8px' }} /> Devices</Tab>
+          <Tab whiteSpace="nowrap" minW="max-content" px={4}><FiClock style={{ marginRight: '8px' }} /> Engagement</Tab>
         </TabList>
 
         <TabPanels>
           {/* Overview Tab */}
           <TabPanel p={0} pt={6}>
-            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6} mb={6}>
+            <SimpleGrid 
+              columns={{ base: 1, sm: 2, lg: 3 }} 
+              spacing={{ base: 4, md: 6 }} 
+              mb={6}
+              w="100%"
+            >
               <StatCard 
                 title="Total Scans" 
                 value={qrCode.scan_count} 
@@ -533,8 +543,9 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
               </CardHeader>
               <CardBody>
                 {scanData.length > 0 ? (
-                  <Box height="300px">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <Box minH="300px" w="100%" position="relative">
+                    <Box position="absolute" top={0} left={0} right={0} bottom={0}>
+                      <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={scanData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
@@ -557,7 +568,8 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                           activeDot={{ r: 4 }}
                         />
                       </LineChart>
-                    </ResponsiveContainer>
+                      </ResponsiveContainer>
+                    </Box>
                   </Box>
                 ) : (
                   <Box textAlign="center" py={10}>
@@ -664,15 +676,20 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
 
           {/* Devices Tab */}
           <TabPanel p={0} pt={6}>
-            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
-              <Card>
+            <SimpleGrid 
+              columns={{ base: 1, sm: 2, lg: 3 }} 
+              spacing={{ base: 4, md: 6 }}
+              w="100%"
+            >
+              <Card h="100%">
                 <CardHeader>
                   <Heading size="md">Devices</Heading>
                 </CardHeader>
                 <CardBody>
                   {enhancedStats?.scans_by_device && Object.keys(enhancedStats.scans_by_device).length > 0 ? (
-                    <Box height="300px">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <Box minH="300px" w="100%" position="relative">
+                      <Box position="absolute" top={0} left={0} right={0} bottom={0}>
+                        <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
                             data={Object.entries(enhancedStats.scans_by_device).map(([name, value]) => ({
@@ -694,6 +711,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                           <RechartsTooltip />
                         </PieChart>
                       </ResponsiveContainer>
+                      </Box>
                     </Box>
                   ) : (
                     <Text color="gray.500">No device data available</Text>
@@ -701,7 +719,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                 </CardBody>
               </Card>
 
-              <Card>
+              <Card h="100%">
                 <CardHeader>
                   <Heading size="md">Operating Systems</Heading>
                 </CardHeader>
@@ -731,7 +749,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                 </CardBody>
               </Card>
 
-              <Card>
+              <Card h="100%">
                 <CardHeader>
                   <Heading size="md">Browsers</Heading>
                 </CardHeader>
@@ -766,14 +784,15 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
           {/* Engagement Tab */}
           <TabPanel p={0} pt={6}>
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-              <Card>
+              <Card h="100%">
                 <CardHeader>
                   <Heading size="md">Scans by Hour</Heading>
                 </CardHeader>
                 <CardBody>
                   {enhancedStats?.scans_by_hour ? (
-                    <Box height="300px">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <Box minH="300px" w="100%" position="relative">
+                      <Box position="absolute" top={0} left={0} right={0} bottom={0}>
+                        <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                           data={Object.entries(enhancedStats.scans_by_hour).map(([hour, count]) => ({
                             hour: `${hour}:00`,
@@ -795,14 +814,15 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                 </CardBody>
               </Card>
 
-              <Card>
+              <Card h="100%">
                 <CardHeader>
                   <Heading size="md">Scans by Weekday</Heading>
                 </CardHeader>
                 <CardBody>
                   {enhancedStats?.scans_by_weekday ? (
-                    <Box height="300px">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <Box minH="300px" w="100%" position="relative">
+                      <Box position="absolute" top={0} left={0} right={0} bottom={0}>
+                        <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                           data={[
                             { name: 'Sun', scans: enhancedStats.scans_by_weekday['0'] || 0 },
@@ -858,6 +878,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
           </ModalFooter>
         </ModalContent>
       </Modal>
+      </Box>
     </Box>
   );
 };
