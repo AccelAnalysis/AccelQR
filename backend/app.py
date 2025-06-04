@@ -659,43 +659,102 @@ def get_date_range(time_range):
 
 @app.route('/api/stats/dashboard/export', methods=['GET'])
 def export_dashboard_stats():
-    # Get query parameters
-    folder = request.args.get('folder')
-    time_range = request.args.get('time_range', '30d')
-    
-    # Get the stats data
-    stats = get_dashboard_stats().get_json()
-    
-    # Create CSV content
-    csv_data = []
-    
-    # Add header
-    csv_data.append(['Metric', 'Value'])
-    
-    # Add summary stats
-    csv_data.append(['Total QR Codes', stats['total_qrcodes']])
-    csv_data.append(['Total Scans', stats['total_scans']])
-    csv_data.append(['Time Range', f"{stats['time_range']['start']} to {stats['time_range']['end']}"])
-    csv_data.append(['Group By', stats['time_range']['group_by']])
-    csv_data.append(['Folder', stats['folder']])
-    
-    # Add empty row before scan data
-    csv_data.append([])
-    csv_data.append(['Date', 'Scan Count'])
-    
-    # Add scan data
-    for scan in stats['scans']:
-        csv_data.append([scan['date'], scan['count']])
-    
-    # Convert to CSV string
-    csv_string = '\n'.join([','.join(map(str, row)) for row in csv_data])
-    
-    # Create response with CSV data
-    response = make_response(csv_string)
-    response.headers['Content-Type'] = 'text/csv'
-    response.headers['Content-Disposition'] = f'attachment; filename=dashboard_export_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv'
-    
-    return response
+    try:
+        # Get query parameters
+        folder = request.args.get('folder')
+        time_range = request.args.get('time_range', '30d')
+        
+        # Get the stats data
+        stats = get_dashboard_stats().get_json()
+        
+        # Create CSV content
+        csv_data = []
+        
+        # Add metadata header
+        csv_data.append(['QR Code Analytics Export'])
+        csv_data.append(['Generated at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')])
+        csv_data.append(['Time Range', f"{stats['time_range']['start']} to {stats['time_range']['end']}"])
+        csv_data.append(['Folder', folder if folder else 'All Folders'])
+        csv_data.append([])  # Empty row for spacing
+        
+        # Add summary statistics
+        csv_data.append(['SUMMARY STATISTICS'])
+        csv_data.append(['Total QR Codes', stats['total_qrcodes']])
+        csv_data.append(['Total Scans', stats['total_scans']])
+        if 'unique_visitors' in stats:
+            csv_data.append(['Unique Visitors', stats['unique_visitors']])
+        if 'avg_scans_per_code' in stats:
+            csv_data.append(['Average Scans per Code', f"{stats['avg_scans_per_code']:.2f}"])
+        csv_data.append([])  # Empty row for spacing
+        
+        # Add scan trends data
+        csv_data.append(['SCAN TRENDS'])
+        csv_data.append(['Date', 'Scan Count'])
+        for scan in stats['scans']:
+            csv_data.append([scan['date'], scan['count']])
+        csv_data.append([])  # Empty row for spacing
+        
+        # Add device breakdown if available
+        if 'scans_by_device' in stats and stats['scans_by_device']:
+            csv_data.append(['DEVICE BREAKDOWN'])
+            csv_data.append(['Device Type', 'Scan Count', 'Percentage'])
+            total_scans = sum(stats['scans_by_device'].values())
+            for device, count in stats['scans_by_device'].items():
+                percentage = (count / total_scans) * 100 if total_scans > 0 else 0
+                csv_data.append([device, count, f"{percentage:.1f}%"])
+            csv_data.append([])  # Empty row for spacing
+        
+        # Add browser breakdown if available
+        if 'scans_by_browser' in stats and stats['scans_by_browser']:
+            csv_data.append(['BROWSER BREAKDOWN'])
+            csv_data.append(['Browser', 'Scan Count', 'Percentage'])
+            total_scans = sum(stats['scans_by_browser'].values())
+            for browser, count in stats['scans_by_browser'].items():
+                percentage = (count / total_scans) * 100 if total_scans > 0 else 0
+                csv_data.append([browser, count, f"{percentage:.1f}%"])
+            csv_data.append([])  # Empty row for spacing
+        
+        # Add country breakdown if available
+        if 'scans_by_country' in stats and stats['scans_by_country']:
+            csv_data.append(['LOCATION BREAKDOWN'])
+            csv_data.append(['Country', 'Scan Count', 'Percentage'])
+            total_scans = sum(stats['scans_by_country'].values())
+            for country, count in stats['scans_by_country'].items():
+                percentage = (count / total_scans) * 100 if total_scans > 0 else 0
+                csv_data.append([country, count, f"{percentage:.1f}%"])
+            csv_data.append([])  # Empty row for spacing
+        
+        # Add top performing QR codes if available
+        if 'top_qrcodes' in stats and stats['top_qrcodes']:
+            csv_data.append(['TOP PERFORMING QR CODES'])
+            csv_data.append(['Rank', 'QR Code Name', 'Scan Count', 'Last Scanned'])
+            for idx, qr in enumerate(stats['top_qrcodes'][:10], 1):
+                last_scan = datetime.strptime(qr['last_scan'], '%Y-%m-%dT%H:%M:%S').strftime('%Y-%m-%d %H:%M') if qr['last_scan'] else 'Never'
+                csv_data.append([idx, qr['name'], qr['scan_count'], last_scan])
+        
+        # Convert to CSV string
+        def escape_csv_value(value):
+            if value is None:
+                return ''
+            if not isinstance(value, str):
+                value = str(value)
+            # Escape double quotes by doubling them
+            if '"' in value or ',' in value or '\n' in value:
+                return '"' + value.replace('"', '""') + '"'
+            return value
+            
+        csv_string = '\n'.join([','.join(escape_csv_value(cell) for cell in row) for row in csv_data])
+        
+        # Create response with CSV data
+        response = make_response(csv_string)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+        response.headers['Content-Disposition'] = f'attachment; filename=qr_analytics_export_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv'
+        
+        return response
+        
+    except Exception as e:
+        app.logger.error(f"Error generating export: {str(e)}")
+        return jsonify({"error": "Failed to generate export"}), 500
 
 @app.route('/api/stats/dashboard', methods=['GET'])
 def get_dashboard_stats():

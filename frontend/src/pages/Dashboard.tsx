@@ -210,15 +210,17 @@ const Dashboard = () => {
     try {
       setIsExporting(true);
       const params = new URLSearchParams();
-      if (activeFolder) {
+      if (activeFolder && activeFolder !== 'All QR Codes') {
         params.append('folder', activeFolder);
       }
       
-      const response = await axios.get(`${ENDPOINTS.QR_CODES}/export`, {
+      // Use the correct endpoint for exporting data
+      const response = await axios.get(`${ENDPOINTS.STATS_DASHBOARD}/export`, {
         responseType: 'blob',
         params
       });
       
+      // Create a download link and trigger the download
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -226,6 +228,9 @@ const Dashboard = () => {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      
+      // Clean up the URL object
+      window.URL.revokeObjectURL(url);
       
       toast({
         title: 'Export successful',
