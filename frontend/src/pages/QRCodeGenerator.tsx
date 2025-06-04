@@ -20,6 +20,7 @@ import {
 } from '@chakra-ui/react';
 import axios from 'axios';
 import { ENDPOINTS, API_URL } from '../config';
+import { FiDownload } from 'react-icons/fi';
 
 const getBaseUrl = () => {
   // Extract the base URL from API_URL (remove /api suffix if present)
@@ -219,11 +220,14 @@ const QRCodeGenerator = () => {
             <Box mt={8}>
               <Heading size="md" mb={4}>QR Code Generated Successfully!</Heading>
               <VStack spacing={4} align="center">
-                {generatedQR.image_url ? (
+                <Box position="relative">
                   <Image
-                    src={generatedQR.image_url.startsWith('http') 
+                    src={generatedQR.image_url?.startsWith('http') 
                       ? generatedQR.image_url 
-                      : `${getBaseUrl()}${generatedQR.image_url}`}
+                      : generatedQR.image_url
+                        ? `${getBaseUrl()}${generatedQR.image_url}`
+                        : `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${getBaseUrl()}/r/${generatedQR.short_code}`)}`
+                    }
                     alt={`QR Code for ${formData.name}`}
                     boxSize="200px"
                     onError={(e) => {
@@ -233,19 +237,31 @@ const QRCodeGenerator = () => {
                       e.currentTarget.src = qrCodeUrl;
                     }}
                   />
-                ) : (
-                  <Box 
-                    boxSize="200px" 
-                    border="1px dashed" 
-                    borderColor="gray.300"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                    bg="gray.50"
+                  <Button
+                    position="absolute"
+                    bottom="-8"
+                    right="0"
+                    left="0"
+                    margin="0 auto"
+                    size="sm"
+                    leftIcon={<FiDownload />}
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = generatedQR.image_url?.startsWith('http') 
+                        ? generatedQR.image_url 
+                        : generatedQR.image_url
+                          ? `${getBaseUrl()}${generatedQR.image_url}`
+                          : `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${getBaseUrl()}/r/${generatedQR.short_code}`)}`;
+                      link.download = `qr-code-${generatedQR.short_code}.png`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
+                    width="fit-content"
                   >
-                    <Text color="gray.500">QR Code will appear here</Text>
-                  </Box>
-                )}
+                    Download
+                  </Button>
+                </Box>
                 <Text>Scan this QR code or share the link below:</Text>
                 <Box 
                   p={3} 
