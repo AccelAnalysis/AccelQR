@@ -276,7 +276,7 @@ const QRCodeGenerator = () => {
                   <Button
                     colorScheme="blue"
                     onClick={() => {
-                      window.open(`/dashboard/qrcodes/${generatedQR.id}`, '_blank');
+                      window.open(`${getBaseUrl()}/dashboard/qrcodes/${generatedQR.id}`, '_blank');
                     }}
                   >
                     View Details
