@@ -30,6 +30,31 @@ def health_check():
         'database': app.config.get('SQLALCHEMY_DATABASE_URI', 'not configured').split('@')[-1] if 'SQLALCHEMY_DATABASE_URI' in app.config else 'not configured'
     }), 200
 
+@app.route('/api/test-redirect/<short_code>', methods=['GET'])
+def test_redirect(short_code):
+    """Test endpoint to verify redirect functionality"""
+    try:
+        # Get the QR code
+        qr = QRCode.query.filter_by(short_code=short_code).first()
+        if not qr:
+            return jsonify({
+                'status': 'error',
+                'message': 'QR code not found',
+                'short_code': short_code
+            }), 404
+            
+        return jsonify({
+            'status': 'success',
+            'short_code': qr.short_code,
+            'target_url': qr.target_url,
+            'created_at': qr.created_at.isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 @app.route('/api/db-config', methods=['GET'])
 def db_config():
     """Endpoint to verify database configuration"""
