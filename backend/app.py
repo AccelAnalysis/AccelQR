@@ -533,7 +533,7 @@ def get_qrcode_image(short_code):
     qr = QRCode.query.filter_by(short_code=short_code).first_or_404()
     
     # Use production URL for the QR code
-    production_url = 'https://accelqr-1.onrender.com'
+    production_url = 'https://accelqr.onrender.com'
     
     # Generate QR code with the production URL
     img = qrcode.make(f'{production_url}/r/{short_code}')
