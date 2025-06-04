@@ -73,6 +73,22 @@ interface ScanData {
   count: number;
 }
 
+interface Scan {
+  id: string;
+  created_at: string;
+  user_agent?: string;
+  ip_address?: string;
+  country?: string;
+  region?: string;
+  city?: string;
+  device_type?: string;
+  os?: string;
+  browser?: string;
+  referrer?: string;
+  time_on_page?: number;
+  scroll_depth?: number;
+}
+
 interface EnhancedStats {
   total_scans: number;
   scans_by_country: Record<string, number>;
@@ -84,7 +100,7 @@ interface EnhancedStats {
   avg_time_on_page: number;
   scroll_rate: number;
   top_referrers: Record<string, number>;
-  scans: any[];
+  scans: Scan[];
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
@@ -602,15 +618,15 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                           .map(([country, count]) => {
                             // Get all scans for this country
                             const countryScans = (enhancedStats.scans || []).filter(
-                              (scan: any) => scan.country === country
+                              (scan: Scan) => scan.country === country
                             );
                             
                             // Group by city, region
-                            const locations = countryScans.reduce((acc: any, scan: any) => {
+                            const locations = countryScans.reduce((acc: Record<string, number>, scan: Scan) => {
                               const key = `${scan.city || 'Unknown'}, ${scan.region || 'Unknown'}`;
                               acc[key] = (acc[key] || 0) + 1;
                               return acc;
-                            }, {});
+                            }, {} as Record<string, number>);
                             
                             return (
                               <React.Fragment key={country}>
@@ -793,20 +809,21 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                     <Box minH="300px" w="100%" position="relative">
                       <Box position="absolute" top={0} left={0} right={0} bottom={0}>
                         <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={Object.entries(enhancedStats.scans_by_hour).map(([hour, count]) => ({
-                            hour: `${hour}:00`,
-                            scans: count
-                          }))}
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="hour" />
-                          <YAxis />
-                          <RechartsTooltip />
-                          <Bar dataKey="scans" fill="#3182ce" name="Scans" />
-                        </BarChart>
-                      </ResponsiveContainer>
+                          <BarChart
+                            data={Object.entries(enhancedStats.scans_by_hour).map(([hour, count]) => ({
+                              hour: `${hour}:00`,
+                              scans: count
+                            }))}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="hour" />
+                            <YAxis />
+                            <RechartsTooltip />
+                            <Bar dataKey="scans" fill="#3182ce" name="Scans" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </Box>
                     </Box>
                   ) : (
                     <Text color="gray.500">No hourly data available</Text>
@@ -823,25 +840,26 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                     <Box minH="300px" w="100%" position="relative">
                       <Box position="absolute" top={0} left={0} right={0} bottom={0}>
                         <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={[
-                            { name: 'Sun', scans: enhancedStats.scans_by_weekday['0'] || 0 },
-                            { name: 'Mon', scans: enhancedStats.scans_by_weekday['1'] || 0 },
-                            { name: 'Tue', scans: enhancedStats.scans_by_weekday['2'] || 0 },
-                            { name: 'Wed', scans: enhancedStats.scans_by_weekday['3'] || 0 },
-                            { name: 'Thu', scans: enhancedStats.scans_by_weekday['4'] || 0 },
-                            { name: 'Fri', scans: enhancedStats.scans_by_weekday['5'] || 0 },
-                            { name: 'Sat', scans: enhancedStats.scans_by_weekday['6'] || 0 },
-                          ]}
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <RechartsTooltip />
-                          <Bar dataKey="scans" fill="#38a169" name="Scans" />
-                        </BarChart>
-                      </ResponsiveContainer>
+                          <BarChart
+                            data={[
+                              { name: 'Sun', scans: enhancedStats.scans_by_weekday['0'] || 0 },
+                              { name: 'Mon', scans: enhancedStats.scans_by_weekday['1'] || 0 },
+                              { name: 'Tue', scans: enhancedStats.scans_by_weekday['2'] || 0 },
+                              { name: 'Wed', scans: enhancedStats.scans_by_weekday['3'] || 0 },
+                              { name: 'Thu', scans: enhancedStats.scans_by_weekday['4'] || 0 },
+                              { name: 'Fri', scans: enhancedStats.scans_by_weekday['5'] || 0 },
+                              { name: 'Sat', scans: enhancedStats.scans_by_weekday['6'] || 0 },
+                            ]}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <RechartsTooltip />
+                            <Bar dataKey="scans" fill="#38a169" name="Scans" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </Box>
                     </Box>
                   ) : (
                     <Text color="gray.500">No weekday data available</Text>
