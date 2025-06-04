@@ -19,7 +19,14 @@ import {
   FormHelperText
 } from '@chakra-ui/react';
 import axios from 'axios';
-import { ENDPOINTS } from '../config';
+import { ENDPOINTS, API_URL } from '../config';
+
+const getBaseUrl = () => {
+  // Extract the base URL from API_URL (remove /api suffix if present)
+  const apiUrl = API_URL.replace('/api', '');
+  // Ensure it doesn't end with a slash
+  return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+};
 
 const QRCodeGenerator = () => {
   const [formData, setFormData] = useState({
@@ -61,6 +68,12 @@ const QRCodeGenerator = () => {
   useEffect(() => {
     fetchFolders();
   }, [fetchFolders]);
+
+  useEffect(() => {
+    if (generatedQR) {
+      console.log('Generated QR data:', generatedQR);
+    }
+  }, [generatedQR]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -206,11 +219,33 @@ const QRCodeGenerator = () => {
             <Box mt={8}>
               <Heading size="md" mb={4}>QR Code Generated Successfully!</Heading>
               <VStack spacing={4} align="center">
-                <Image
-                  src={generatedQR.image_url}
-                  alt={`QR Code for ${formData.name}`}
-                  boxSize="200px"
-                />
+                {generatedQR.image_url ? (
+                  <Image
+                    src={generatedQR.image_url.startsWith('http') 
+                      ? generatedQR.image_url 
+                      : `${getBaseUrl()}${generatedQR.image_url}`}
+                    alt={`QR Code for ${formData.name}`}
+                    boxSize="200px"
+                    onError={(e) => {
+                      console.error('Error loading QR code image:', e);
+                      // Fallback to generating a QR code URL if the image fails to load
+                      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${getBaseUrl()}/r/${generatedQR.short_code}`)}`;
+                      e.currentTarget.src = qrCodeUrl;
+                    }}
+                  />
+                ) : (
+                  <Box 
+                    boxSize="200px" 
+                    border="1px dashed" 
+                    borderColor="gray.300"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    bg="gray.50"
+                  >
+                    <Text color="gray.500">QR Code will appear here</Text>
+                  </Box>
+                )}
                 <Text>Scan this QR code or share the link below:</Text>
                 <Box 
                   p={3} 
@@ -220,13 +255,13 @@ const QRCodeGenerator = () => {
                   textAlign="center"
                   fontFamily="mono"
                 >
-                  {window.location.origin}/r/{generatedQR.short_code}
+                  {getBaseUrl()}/r/{generatedQR.short_code}
                 </Box>
                 <HStack spacing={4} mt={4}>
                   <Button
                     onClick={() => {
                       navigator.clipboard.writeText(
-                        `${window.location.origin}/r/${generatedQR.short_code}`
+                        `${getBaseUrl()}/r/${generatedQR.short_code}`
                       );
                       toast({
                         title: 'Copied!',

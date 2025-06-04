@@ -83,6 +83,7 @@ interface EnhancedStats {
   avg_time_on_page: number;
   scroll_rate: number;
   top_referrers: Record<string, number>;
+  scans: any[];
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
@@ -571,26 +572,56 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
               <Card>
                 <CardHeader>
-                  <Heading size="md">Top Countries</Heading>
+                  <Heading size="md">Top Locations</Heading>
                 </CardHeader>
                 <CardBody>
                   {enhancedStats?.scans_by_country && Object.keys(enhancedStats.scans_by_country).length > 0 ? (
-                    <Table variant="simple">
+                    <Table variant="simple" size="sm">
                       <Thead>
                         <Tr>
-                          <Th>Country</Th>
+                          <Th>Location</Th>
                           <Th isNumeric>Scans</Th>
                         </Tr>
                       </Thead>
                       <Tbody>
                         {Object.entries(enhancedStats.scans_by_country)
                           .sort((a, b) => b[1] - a[1])
-                          .map(([country, count]) => (
-                            <Tr key={country}>
-                              <Td>{country || 'Unknown'}</Td>
-                              <Td isNumeric>{count}</Td>
-                            </Tr>
-                          ))}
+                          .map(([country, count]) => {
+                            // Get all scans for this country
+                            const countryScans = (enhancedStats.scans || []).filter(
+                              (scan: any) => scan.country === country
+                            );
+                            
+                            // Group by city, region
+                            const locations = countryScans.reduce((acc: any, scan: any) => {
+                              const key = `${scan.city || 'Unknown'}, ${scan.region || 'Unknown'}`;
+                              acc[key] = (acc[key] || 0) + 1;
+                              return acc;
+                            }, {});
+                            
+                            return (
+                              <React.Fragment key={country}>
+                                <Tr bg="gray.50">
+                                  <Td colSpan={2} fontWeight="bold">
+                                    {country || 'Unknown'}
+                                    <Text as="span" ml={2} color="gray.500" fontWeight="normal">
+                                      ({count} scans)
+                                    </Text>
+                                  </Td>
+                                </Tr>
+                                {Object.entries(locations)
+                                  .sort((a: any, b: any) => b[1] - a[1])
+                                  .map(([location, locationCount]: [string, number]) => (
+                                    <Tr key={`${country}-${location}`}>
+                                      <Td pl={8} fontStyle="italic">
+                                        {location}
+                                      </Td>
+                                      <Td isNumeric>{locationCount}</Td>
+                                    </Tr>
+                                  ))}
+                              </React.Fragment>
+                            );
+                          })}
                       </Tbody>
                     </Table>
                   ) : (

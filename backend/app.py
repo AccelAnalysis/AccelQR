@@ -316,7 +316,7 @@ def get_qrcodes():
             'short_code': qr.short_code,
             'folder': qr.folder,
             'created_at': qr.created_at.isoformat(),
-            'scan_count': 0  # Temporarily set to 0 to avoid relationship access
+            'scan_count': len(qr.scans)  # Get actual scan count from the relationship
         } for qr in qrcodes]
         
         return jsonify(qrcodes_data), 200
