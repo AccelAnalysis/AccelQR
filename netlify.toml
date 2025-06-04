@@ -1,0 +1,12 @@
+[build]
+  command = "cd frontend && npm install && npm run build"
+  publish = "frontend/dist"
+
+[dev]
+  command = "cd frontend && npm run dev"
+  port = 5173  # Vite's default port
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
