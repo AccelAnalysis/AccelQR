@@ -4,9 +4,14 @@ services:
     name: qr-tracker-backend
     env: python
     buildCommand: |
-      cd backend
-      pip install -r requirements.txt
-      python init_db.py
+      echo "Starting build process..."
+      echo "Current directory: $(pwd)"
+      echo "Contents of backend directory:"
+      ls -la backend/
+      echo "Installing Python dependencies..."
+      pip install -r backend/requirements.txt
+      echo "Running database initialization..."
+      python backend/init_db.py
     startCommand: gunicorn backend.app:create_app()
     envVars:
       - key: PYTHON_VERSION
