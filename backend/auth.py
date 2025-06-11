@@ -69,22 +69,15 @@ def login():
         if not data or not data.get('email') or not data.get('password'):
             return jsonify({"msg": "Email and password are required"}), 400
         
-        # Get the database path from the app config
-        db_path = current_app.config.get('DATABASE_PATH')
+        # Get the database URI from the app config
         db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI')
         
         print(f"Database URI from config: {db_uri}")
-        print(f"Database path from config: {db_path}")
         
-        # Verify database connection
-        if not db_path or not db_uri:
+        # Verify database configuration
+        if not db_uri:
             print("Error: Database configuration not properly set in app config")
             return jsonify({"msg": "Server configuration error"}), 500
-            
-        # Check if the database file exists
-        if not os.path.exists(db_path):
-            print(f"Error: Database file not found at {db_path}")
-            return jsonify({"msg": f"Database not found at {db_path}"}), 500
         
         # Debug: List all users in the database
         try:
