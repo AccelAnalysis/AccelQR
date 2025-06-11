@@ -43,29 +43,35 @@ def create_app():
     app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
     
     # Configuration
-    # Use absolute path to the database file
-    basedir = os.path.abspath(os.path.dirname(__file__))
-    instance_path = os.path.join(basedir, 'instance')
-    os.makedirs(instance_path, exist_ok=True)  # Ensure instance directory exists
-    
-    # Use PostgreSQL from environment variable (provided by Render)
+    # Get database URL from environment variable (required)
     db_uri = os.getenv('DATABASE_URL')
     if not db_uri:
-        # Fallback to SQLite for local development
-        db_path = os.path.join(instance_path, 'qrcodes.db')
-        db_uri = f'sqlite:///{os.path.abspath(db_path).replace(os.sep, "/")}'
-        print(f"Using SQLite database at: {db_uri}")
-    else:
-        # Handle Render's PostgreSQL URL (replace 'postgres' with 'postgresql')
-        if db_uri.startswith('postgres://'):
-            db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
-        print(f"Using PostgreSQL database")
+        raise ValueError("No DATABASE_URL environment variable set. Please configure your database.")
     
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_pre_ping': True,
-        'pool_recycle': 300,
-    }
+    # Ensure PostgreSQL URL format is correct
+    if db_uri.startswith('postgres://'):
+        db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
+    
+    print(f"Using PostgreSQL database: {db_uri.split('@')[-1]}")
+    
+    # Database configuration
+    app.config.update(
+        SQLALCHEMY_DATABASE_URI=db_uri,
+        SQLALCHEMY_ENGINE_OPTIONS={
+            'pool_pre_ping': True,
+            'pool_recycle': 300,
+            'pool_size': 10,
+            'max_overflow': 20,
+            'connect_args': {
+                'connect_timeout': 5,
+                'keepalives': 1,
+                'keepalives_idle': 30,
+                'keepalives_interval': 10,
+                'keepalives_count': 5
+            }
+        },
+        SQLALCHEMY_TRACK_MODIFICATIONS=False
+    )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = 3600  # 1 hour
