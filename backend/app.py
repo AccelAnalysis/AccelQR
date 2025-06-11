@@ -14,6 +14,7 @@ import base64
 import uuid
 import geoip2.database
 from user_agents import parse
+from sqlalchemy import text, inspect
 
 # Configure logging
 log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
@@ -88,15 +89,23 @@ def create_app():
     
     # Initialize database tables
     with app.app_context():
-        # Create instance directory if it doesn't exist
-        instance_path = os.path.join(app.root_path, 'instance')
-        os.makedirs(instance_path, exist_ok=True)
-        
-        # Create database file if it doesn't exist
-        db_path = os.path.join(instance_path, 'qrcodes.db')
-        if not os.path.exists(db_path):
-            open(db_path, 'a').close()
-            print(f"Created new database at: {db_path}")
+        # Verify database connection
+        try:
+            db.engine.connect()
+            print("✓ Successfully connected to PostgreSQL database")
+            
+            # Log database information
+            db_version = db.session.execute(text("SELECT version();")).scalar()
+            print(f"Database version: {db_version}")
+            
+            # Log all tables
+            inspector = inspect(db.engine)
+            tables = inspector.get_table_names()
+            print(f"Database tables: {', '.join(tables) if tables else 'No tables found'}")
+            
+        except Exception as e:
+            print(f"❌ Failed to connect to database: {str(e)}")
+            raise
             
         # Create tables
         db.create_all()
