@@ -7,11 +7,20 @@ import uuid
 
 bp = Blueprint('qrcodes', __name__, url_prefix='/api/qrcodes')
 
+def get_current_user():
+    user_id = get_jwt_identity()
+    return User.query.get(user_id)
+
 @bp.route('', methods=['GET'])
 @jwt_required()
 def get_qrcodes():
-    current_user_id = get_jwt_identity()
-    qrcodes = QRCode.query.filter_by(user_id=current_user_id).all()
+    user = get_current_user()
+    if user.is_admin:
+        # If admin, get all QR codes
+        qrcodes = QRCode.query.all()
+    else:
+        # If regular user, only get their QR codes
+        qrcodes = QRCode.query.filter_by(user_id=user.id).all()
     
     return jsonify([{
         'id': qr.id,
@@ -20,14 +29,21 @@ def get_qrcodes():
         'target_url': qr.target_url,
         'created_at': qr.created_at.isoformat(),
         'scan_count': len(qr.scans),
-        'folder': qr.folder
+        'folder': qr.folder,
+        'user_id': qr.user_id,  # Include user_id in the response
+        'user_email': qr.user.email if qr.user else None  # Include user email
     } for qr in qrcodes])
 
 @bp.route('/<int:qrcode_id>', methods=['GET'])
 @jwt_required()
 def get_qrcode(qrcode_id):
-    current_user_id = get_jwt_identity()
-    qrcode = QRCode.query.filter_by(id=qrcode_id, user_id=current_user_id).first_or_404()
+    user = get_current_user()
+    if user.is_admin:
+        # If admin, can access any QR code
+        qrcode = QRCode.query.get_or_404(qrcode_id)
+    else:
+        # If regular user, can only access their own QR codes
+        qrcode = QRCode.query.filter_by(id=qrcode_id, user_id=user.id).first_or_404()
     
     return jsonify({
         'id': qrcode.id,
@@ -35,6 +51,8 @@ def get_qrcode(qrcode_id):
         'short_code': qrcode.short_code,
         'target_url': qrcode.target_url,
         'created_at': qrcode.created_at.isoformat(),
+        'user_id': qrcode.user_id,  # Include user_id in the response
+        'user_email': qrcode.user.email if qrcode.user else None,  # Include user email
         'scans': [{
             'id': scan.id,
             'timestamp': scan.timestamp.isoformat(),

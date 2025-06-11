@@ -56,38 +56,46 @@ def create_app():
     print(f"Using PostgreSQL database: {db_uri.split('@')[-1]}")
     
     # Database configuration
-    app.config.update(
-        SQLALCHEMY_DATABASE_URI=db_uri,
-        SQLALCHEMY_ENGINE_OPTIONS={
-            'pool_pre_ping': True,
-            'pool_recycle': 300,
-            'pool_size': 10,
-            'max_overflow': 20,
-            'connect_args': {
-                'connect_timeout': 5,
-                'keepalives': 1,
-                'keepalives_idle': 30,
-                'keepalives_interval': 10,
-                'keepalives_count': 5
-            }
-        },
-        SQLALCHEMY_TRACK_MODIFICATIONS=False
-    )
+    if 'postgresql' in db_uri:
+        app.config.update(
+            SQLALCHEMY_DATABASE_URI=db_uri,
+            SQLALCHEMY_ENGINE_OPTIONS={
+                'pool_pre_ping': True,
+                'pool_recycle': 300,
+                'pool_size': 10,
+                'max_overflow': 20,
+                'connect_args': {
+                    'connect_timeout': 5,
+                    'keepalives': 1,
+                    'keepalives_idle': 30,
+                    'keepalives_interval': 10,
+                    'keepalives_count': 5
+                }
+            },
+            SQLALCHEMY_TRACK_MODIFICATIONS=False
+        )
+    else:
+        # SQLite configuration
+        app.config.update(
+            SQLALCHEMY_DATABASE_URI=db_uri,
+            SQLALCHEMY_TRACK_MODIFICATIONS=False
+        )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = 3600  # 1 hour
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = 2592000  # 30 days
     
-    # Initialize extensions
-    from models import db, init_db
+    # Initialize SQLAlchemy
+    from models import db, User
     db.init_app(app)
     
-    # Initialize the database
-    init_db(app)
-    
+    # Initialize JWT
     jwt = JWTManager(app)
     
-    # Initialize database tables
+    # Initialize Flask-Migrate
+    migrate = Migrate(app, db)
+    
+    # Initialize database
     with app.app_context():
         # Verify database connection
         try:
@@ -95,7 +103,10 @@ def create_app():
             print("✓ Successfully connected to PostgreSQL database")
             
             # Log database information
-            db_version = db.session.execute(text("SELECT version();")).scalar()
+            if 'sqlite' in db.engine.url.drivername:
+                db_version = 'SQLite ' + db.session.execute(text("SELECT sqlite_version();")).scalar()
+            else:
+                db_version = db.session.execute(text("SELECT version();")).scalar()
             print(f"Database version: {db_version}")
             
             # Log all tables
@@ -103,13 +114,24 @@ def create_app():
             tables = inspector.get_table_names()
             print(f"Database tables: {', '.join(tables) if tables else 'No tables found'}")
             
-        except Exception as e:
-            print(f"❌ Failed to connect to database: {str(e)}")
-            raise
+            # Create admin user if it doesn't exist
+            admin_email = "jholman@accelanalysis.com"
+            admin = User.query.filter_by(email=admin_email).first()
             
-        # Create tables
-        db.create_all()
-        print("Database tables created")
+            if not admin:
+                print("Creating admin user...")
+                admin = User(
+                    email=admin_email,
+                    is_admin=True
+                )
+                admin.set_password("Missions1!")
+                db.session.add(admin)
+                db.session.commit()
+                print("Admin user created successfully")
+            
+        except Exception as e:
+            print(f"❌ Failed to initialize database: {str(e)}")
+            raise
     
     # Configure CORS - Allow all origins for testing
     CORS(app, resources={
