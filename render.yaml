@@ -37,7 +37,7 @@ services:
     staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_API_URL
-        value: https://accelqr.onrender.com  # This will be your backend URL
+        value: https://qr-tracker-backend.onrender.com/api  # Points to the backend API
 
 # Database configuration
 databases:
