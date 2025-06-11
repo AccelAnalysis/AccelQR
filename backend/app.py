@@ -48,14 +48,24 @@ def create_app():
     instance_path = os.path.join(basedir, 'instance')
     os.makedirs(instance_path, exist_ok=True)  # Ensure instance directory exists
     
-    # Create a proper SQLite URI that works across operating systems
-    db_path = os.path.join(instance_path, 'qrcodes.db')
-    db_uri = os.getenv('DATABASE_URL', f'sqlite:///{os.path.abspath(db_path).replace(os.sep, "/")}')
-    print(f"Using database at: {db_uri}")
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+    # Use PostgreSQL from environment variable (provided by Render)
+    db_uri = os.getenv('DATABASE_URL')
+    if not db_uri:
+        # Fallback to SQLite for local development
+        db_path = os.path.join(instance_path, 'qrcodes.db')
+        db_uri = f'sqlite:///{os.path.abspath(db_path).replace(os.sep, "/")}'
+        print(f"Using SQLite database at: {db_uri}")
+    else:
+        # Handle Render's PostgreSQL URL (replace 'postgres' with 'postgresql')
+        if db_uri.startswith('postgres://'):
+            db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
+        print(f"Using PostgreSQL database")
     
-    # Also set the database path in the app config for easy access
-    app.config['DATABASE_PATH'] = db_path
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+    }
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = 3600  # 1 hour
@@ -72,7 +82,19 @@ def create_app():
     
     # Initialize database tables
     with app.app_context():
+        # Create instance directory if it doesn't exist
+        instance_path = os.path.join(app.root_path, 'instance')
+        os.makedirs(instance_path, exist_ok=True)
+        
+        # Create database file if it doesn't exist
+        db_path = os.path.join(instance_path, 'qrcodes.db')
+        if not os.path.exists(db_path):
+            open(db_path, 'a').close()
+            print(f"Created new database at: {db_path}")
+            
+        # Create tables
         db.create_all()
+        print("Database tables created")
     
     # Configure CORS - Allow all origins for testing
     CORS(app, resources={

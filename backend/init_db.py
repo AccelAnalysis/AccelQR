@@ -1,27 +1,31 @@
 from app import create_app
 from models import db, User
+from werkzeug.security import generate_password_hash
 import os
 
-def init_database():
+def init_db():
     app = create_app()
-    
     with app.app_context():
         # Create all tables
         print("Creating database tables...")
         db.create_all()
+        print("Database tables created")
         
-        # Check if admin user already exists
-        admin_email = "jholman@accelanalysis.com"
+        # Get admin credentials from environment variables
+        admin_email = os.getenv('ADMIN_EMAIL', 'admin@example.com')
+        admin_password = os.getenv('ADMIN_PASSWORD', 'admin')  # Change this in production!
+        
+        # Check if admin user exists
         admin = User.query.filter_by(email=admin_email).first()
         
         if not admin:
             # Create admin user
-            print("Creating admin user...")
+            print(f"Creating admin user: {admin_email}")
             admin = User(
                 email=admin_email,
+                password_hash=generate_password_hash(admin_password),
                 is_admin=True
             )
-            admin.set_password("Missions1!")  # Hash the password
             db.session.add(admin)
             db.session.commit()
             print("Admin user created successfully!")
@@ -42,14 +46,4 @@ def init_database():
                 print(f"- {column['name']}: {column['type']}")
 
 if __name__ == "__main__":
-    # Remove existing database
-    db_path = os.path.join(os.path.dirname(__file__), 'instance', 'qrcodes.db')
-    if os.path.exists(db_path):
-        print(f"Removing existing database: {db_path}")
-        os.remove(db_path)
-    
-    # Create directory if it doesn't exist
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    
-    # Initialize database
-    init_database()
+    init_db()
