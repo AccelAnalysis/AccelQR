@@ -4,16 +4,19 @@ A full-stack application for generating and managing QR codes with analytics.
 
 ## Features
 
-- Generate QR codes with custom data
-- Organize QR codes in folders
-- Track scans and view analytics
-- Responsive web interface
+- **User Authentication**: Secure login and registration system
+- **Role-based Access**: Admin and regular user roles
+- **QR Code Management**: Generate and manage QR codes
+- **Organization**: Organize QR codes in folders
+- **Analytics**: Track scans and view detailed analytics
+- **Responsive Web Interface**: Works on all devices
 
 ## Tech Stack
 
-- **Frontend**: React, TypeScript, Vite, Chakra UI
-- **Backend**: Python, Flask, SQLAlchemy
-- **Database**: SQLite (development)
+- **Frontend**: React, TypeScript, Vite, Chakra UI, React Router
+- **Backend**: Python, Flask, Flask-JWT-Extended, SQLAlchemy
+- **Authentication**: JWT (JSON Web Tokens)
+- **Database**: SQLite (development), PostgreSQL (production ready)
 
 ## Getting Started
 
@@ -22,8 +25,25 @@ A full-stack application for generating and managing QR codes with analytics.
 - Node.js (v16 or later)
 - Python 3.9+
 - npm or yarn
+- PostgreSQL (for production)
 
-### Installation
+### Quick Start
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/qr-tracker.git
+   cd qr-tracker
+   ```
+
+2. **Run the setup script**
+   ```bash
+   ./setup.sh
+   ```
+   This will guide you through setting up both the backend and frontend.
+
+### Manual Installation
+
+If you prefer to set up manually, follow these steps:
 
 1. **Clone the repository**
    ```bash
@@ -37,14 +57,26 @@ A full-stack application for generating and managing QR codes with analytics.
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    pip install -r requirements.txt
-   flask db upgrade
+   
+   # Set up environment variables
+   cp .env.example .env
+   # Edit .env with your configuration
+   
+   # Initialize the database and create admin user
+   python create_admin.py
    ```
 
 3. **Set up the frontend**
    ```bash
    cd ../frontend
+   cp .env.example .env
+   # Edit .env to point to your backend API
    npm install
    ```
+
+### Authentication Setup
+
+For detailed authentication setup instructions, see [AUTHENTICATION_SETUP.md](AUTHENTICATION_SETUP.md).
 
 ### Running Locally
 
