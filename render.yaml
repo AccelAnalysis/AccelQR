@@ -4,7 +4,7 @@ services:
     name: qr-tracker-backend
     env: python
     buildCommand: |
-      pip install -r backend/requirements.txt
+      pip install -r requirements.txt
       python backend/init_db.py
     startCommand: gunicorn backend.app:create_app()
     envVars:
@@ -21,9 +21,9 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: ADMIN_EMAIL
-        value: admin@example.com  # Change this to your admin email
+        value: jholman@accelanalysis.com.com  # Change this to your admin email
       - key: ADMIN_PASSWORD
-        value: your-secure-password  # Change this to a secure password
+        value: Missions1!  # Change this to a secure password
 
   # Frontend service
   - type: web
@@ -36,7 +36,7 @@ services:
     staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_API_URL
-        value: https://qr-tracker-backend.onrender.com/api  # This will be your backend URL
+        value: https://accelqr.onrender.com  # This will be your backend URL
 
 # Database configuration
 databases:
