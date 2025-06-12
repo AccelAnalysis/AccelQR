@@ -105,6 +105,8 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/api')
     from routes.folders import bp as folders_bp
     app.register_blueprint(folders_bp, url_prefix='/api/folders')
+    from routes.qrcodes_stats import bp as qrcodes_stats_bp
+    app.register_blueprint(qrcodes_stats_bp, url_prefix='/api/qrcodes')
     
     # Configure CORS
     CORS(app, resources={
