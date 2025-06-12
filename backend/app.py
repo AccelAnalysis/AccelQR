@@ -97,13 +97,14 @@ def create_app():
     jwt.init_app(app)
     
     # Import and register blueprints
-    from routes import qrcodes as qrcodes_blueprint
-    from routes import stats as stats_blueprint
-    from auth_routes import bp as auth_blueprint
-    
-    app.register_blueprint(qrcodes_blueprint.bp, url_prefix='/api/qrcodes')
-    app.register_blueprint(stats_blueprint.bp, url_prefix='/api/stats')
-    app.register_blueprint(auth_blueprint)
+    from routes.qrcodes import bp as qrcodes_bp
+    app.register_blueprint(qrcodes_bp, url_prefix='/api/qrcodes')
+    from routes.stats import bp as stats_bp
+    app.register_blueprint(stats_bp, url_prefix='/api/stats')
+    from routes.auth import bp as auth_bp
+    app.register_blueprint(auth_bp)
+    from routes.folders import bp as folders_bp
+    app.register_blueprint(folders_bp, url_prefix='/api/folders')
     
     # Configure CORS
     CORS(app, resources={
