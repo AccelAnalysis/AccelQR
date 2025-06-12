@@ -1,6 +1,5 @@
 from app import create_app
 from models import db, User
-from werkzeug.security import generate_password_hash
 import os
 import sys
 from sqlalchemy.exc import SQLAlchemyError
@@ -17,11 +16,8 @@ def init_db():
             print("✓ Database tables created")
             
             # Get admin credentials from environment variables
-            admin_email = os.getenv('ADMIN_EMAIL')
-            admin_password = os.getenv('ADMIN_PASSWORD')
-            
-            if not admin_email or not admin_password:
-                raise ValueError("ADMIN_EMAIL and ADMIN_PASSWORD environment variables must be set")
+            admin_email = os.getenv('ADMIN_EMAIL', 'admin@example.com')
+            admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
             
             # Check if admin user exists
             admin = User.query.filter_by(email=admin_email).first()
@@ -32,9 +28,9 @@ def init_db():
                 try:
                     admin = User(
                         email=admin_email,
-                        password_hash=generate_password_hash(admin_password),
                         is_admin=True
                     )
+                    admin.set_password(admin_password)
                     db.session.add(admin)
                     db.session.commit()
                     print("✓ Admin user created successfully!")
@@ -44,6 +40,11 @@ def init_db():
                     raise
             else:
                 print("ℹ️ Admin user already exists.")
+                # Update password if it's the default one
+                if admin.check_password('admin123'):
+                    admin.set_password(admin_password)
+                    db.session.commit()
+                    print("✓ Admin password updated")
             
             # Verify database schema
             print("\nVerifying database schema...")
