@@ -4,6 +4,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from flask_jwt_extended import jwt_required, create_access_token, get_jwt_identity
 from extensions import db, jwt
 from datetime import datetime, timedelta
+from models import QRCode, Scan
 import os
 import logging
 from dotenv import load_dotenv
