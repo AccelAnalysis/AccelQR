@@ -6,7 +6,7 @@ services:
     buildCommand: |
       chmod +x ./build.sh
       ./build.sh
-    startCommand: gunicorn backend.app:create_app()
+    startCommand: gunicorn --worker-tmp-dir /dev/shm --workers=2 --threads=4 --worker-class=gthread --timeout 600 --bind :$PORT backend.app:create_app()
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
@@ -21,9 +21,15 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: ADMIN_EMAIL
-        value: jholman@accelanalysis.com.com  # Change this to your admin email
+        value: jholman@accelanalysis.com
       - key: ADMIN_PASSWORD
-        value: Missions1!  # Change this to a secure password
+        value: Missions1!
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: PYTHONPATH
+        value: /opt/render/project/src
+    plan: free
+    autoDeploy: true
 
   # Frontend service
   - type: web
@@ -32,11 +38,13 @@ services:
     buildCommand: |
       cd frontend
       npm install
-      VITE_API_URL=https://accelqr.onrender.com/api npm run build
+      VITE_API_URL=https://qr-tracker-backend.onrender.com/api npm run build
     staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_API_URL
         value: https://qr-tracker-backend.onrender.com/api  # Points to the backend API
+    plan: free
+    autoDeploy: true
 
 # Database configuration
 databases:
