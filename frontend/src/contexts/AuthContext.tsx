@@ -53,7 +53,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         
         // Try to get the current user
-        const response = await axios.get(`${API_BASE_URL}/auth/me`);
+        const response = await axios.get(`${API_BASE_URL}/me`);
         setUser(response.data);
       } catch (error) {
         console.error('Auth check failed', error);
