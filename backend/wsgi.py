@@ -1,5 +1,7 @@
 import os
-from app import app, db, QRCode, Scan  # Import models to ensure they're registered with SQLAlchemy
+from app import app
+from models import QRCode, Scan  # Import models to ensure they're registered with SQLAlchemy
+from extensions import db
 import logging
 
 # Configure logging

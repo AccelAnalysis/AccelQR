@@ -1,6 +1,8 @@
 import os
 import sys
-from app import app, db, QRCode, Scan
+from app import app
+from models import QRCode, Scan
+from extensions import db
 
 def reset_database():
     db_path = os.path.join(app.instance_path, 'qrcodes.db')

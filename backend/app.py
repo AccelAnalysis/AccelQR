@@ -1,8 +1,7 @@
 from flask import Flask, jsonify, request, send_from_directory, redirect, url_for, session
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
-from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 from werkzeug.security import check_password_hash, generate_password_hash
+from extensions import db, jwt
 from datetime import datetime, timedelta
 import os
 import logging
@@ -33,8 +32,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Initialize extensions
-db = SQLAlchemy()
+# Database and JWT are now initialized in extensions.py
 migrate = None
 jwt = None
 
@@ -96,7 +94,7 @@ def create_app():
     app.permanent_session_lifetime = timedelta(days=1)
     
     # Initialize JWT
-    JWTManager(app)
+    jwt.init_app(app)
     
     # Import and register blueprints
     from routes import qrcodes as qrcodes_blueprint

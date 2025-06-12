@@ -1,19 +1,9 @@
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, get_jwt_identity
 from flask import current_app
 import jwt
-
-# Initialize SQLAlchemy
-db = SQLAlchemy()
-
-def init_db(app):
-    """Initialize the database with the Flask app."""
-    with app.app_context():
-        # Create all tables
-        db.create_all()
-        print("Database tables created successfully")
+from extensions import db
 
 class QRCode(db.Model):
     __tablename__ = 'qrcodes'

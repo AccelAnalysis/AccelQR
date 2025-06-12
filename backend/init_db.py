@@ -1,5 +1,6 @@
 from app import create_app
-from models import db, User
+from models import User, db
+from extensions import db as ext_db
 import os
 import sys
 from sqlalchemy.exc import SQLAlchemyError
@@ -12,7 +13,7 @@ def init_db():
             
             # Create all tables
             print("Creating database tables...")
-            db.create_all()
+            ext_db.create_all()
             print("✓ Database tables created")
             
             # Get admin credentials from environment variables
