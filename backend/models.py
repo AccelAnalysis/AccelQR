@@ -14,8 +14,6 @@ class QRCode(db.Model):
     short_code = db.Column(db.String(10), unique=True, nullable=False)
     folder = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    
     # Relationships
     scans = db.relationship('Scan', backref='qrcode', lazy=True, cascade="all, delete-orphan")
 
@@ -48,9 +46,6 @@ class User(db.Model):
     password_hash = db.Column(db.String(128), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    qrcodes = db.relationship('QRCode', backref='user', lazy=True)
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
