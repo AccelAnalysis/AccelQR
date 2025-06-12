@@ -34,8 +34,9 @@ logger = logging.getLogger(__name__)
 
 # Initialize extensions
 db = SQLAlchemy()
+migrate = None
+jwt = None
 
-# Simple authentication decorator
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -44,26 +45,12 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Initialize extensions
-db = SQLAlchemy()
-migrate = None
-jwt = None
-
-# Create the app
-app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
-
-# Initialize database
-db.init_app(app)
-
 def create_app():
     """Create and configure the Flask application."""
-    global app, db
-    # Use existing app or create new one if not in app context
-    if 'app' not in globals():
-        app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
+    # Create the app
+    app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
     
-    # Configuration
-    # Get database URL from environment variable (required)
+    # Configure database
     db_uri = os.getenv('DATABASE_URL')
     if not db_uri:
         raise ValueError("No DATABASE_URL environment variable set. Please configure your database.")
@@ -71,8 +58,6 @@ def create_app():
     # Ensure PostgreSQL URL format is correct
     if db_uri.startswith('postgres://'):
         db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
-    
-    print(f"Using PostgreSQL database: {db_uri.split('@')[-1]}")
     
     # Database configuration
     if 'postgresql' in db_uri:
@@ -99,61 +84,43 @@ def create_app():
             SQLALCHEMY_DATABASE_URI=db_uri,
             SQLALCHEMY_TRACK_MODIFICATIONS=False
         )
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
-    # Database is already initialized at module level
+    # Initialize extensions with app
+    db.init_app(app)
     
     # Configure session
     app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
     app.permanent_session_lifetime = timedelta(days=1)
     
-    # Create tables if they don't exist
-    with app.app_context():
-        # Create all tables if they don't exist
-        db.create_all()
-        
-        # Check if admin_credentials table exists
-        inspector = db.inspect(db.engine)
-        if 'admin_credentials' in inspector.get_table_names():
-            # Initialize admin password if not set
-            admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
-            result = db.session.execute(
-                "SELECT 1 FROM admin_credentials LIMIT 1"
-            ).fetchone()
-            
-            if not result:
-                password_hash = generate_password_hash(admin_password)
-                db.session.execute(
-                    "INSERT INTO admin_credentials (password_hash) VALUES (:hash)",
-                    {'hash': password_hash}
-                )
-                db.session.commit()
-                logger.info("Initialized admin password")
+    # Import and register blueprints
+    from routes import qrcodes as qrcodes_blueprint
+    from routes import stats as stats_blueprint
+    from auth_routes import bp as auth_blueprint
     
-    # Import blueprints
-    from auth_routes import bp as auth_bp
-    
-    # Register blueprints
-    app.register_blueprint(auth_bp)
+    app.register_blueprint(qrcodes_blueprint.bp, url_prefix='/api/qrcodes')
+    app.register_blueprint(stats_blueprint.bp, url_prefix='/api/stats')
+    app.register_blueprint(auth_blueprint)
     
     # Configure CORS
     CORS(app, resources={
         r"/*": {
             "origins": "*",
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type"],
+            "allow_headers": ["Content-Type", "Authorization"],
             "supports_credentials": True
         }
     })
     
-    # Import models after app creation to avoid circular imports
-    from models import db, QRCode, Scan
-    
-    # Routes
+    # Create tables if they don't exist
+    with app.app_context():
+        db.create_all()
+        
+    # Add health check endpoint
     @app.route('/api/health')
     def health_check():
         return jsonify({"status": "healthy"}), 200
-    
+
+    # Add QR code creation endpoint
     @app.route('/api/qrcodes', methods=['POST'])
     @jwt_required()
     def create_qrcode():
@@ -204,6 +171,7 @@ def create_app():
             "short_url": f"{request.host_url}r/{short_code}"
         }), 201
     
+    # Add short URL redirection endpoint
     @app.route('/r/<short_code>', methods=['GET'])
     def redirect_short_code(short_code):
         qr_code = QRCode.query.filter_by(short_code=short_code).first_or_404()
@@ -227,6 +195,7 @@ def create_app():
         
         return redirect(qr_code.target_url)
     
+    # Add QR code listing endpoint
     @app.route('/api/qrcodes', methods=['GET'])
     @jwt_required()
     def get_qrcodes():
@@ -243,6 +212,7 @@ def create_app():
             'short_url': f"{request.host_url}r/{qr.short_code}"
         } for qr in qrcodes])
     
+    # Add QR code detail endpoint
     @app.route('/api/qrcodes/<int:qrcode_id>', methods=['GET'])
     @jwt_required()
     def get_qrcode(qrcode_id):
@@ -267,6 +237,7 @@ def create_app():
             'short_url': f"{request.host_url}r/{qr.short_code}"
         })
     
+    # Add QR code deletion endpoint
     @app.route('/api/qrcodes/<int:qrcode_id>', methods=['DELETE'])
     @jwt_required()
     def delete_qrcode(qrcode_id):
