@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from models import db, QRCode, Scan
 from sqlalchemy import func
-from datetime import datetime
+from datetime import datetime, timedelta
 
 bp = Blueprint('qrcodes_stats', __name__, url_prefix='/api/qrcodes')
 
