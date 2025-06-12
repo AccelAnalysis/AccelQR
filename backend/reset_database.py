@@ -32,13 +32,12 @@ def reset_database():
         # Refresh the admin user to get the ID
         admin = User.query.filter_by(email=admin_email).first()
         
-        # Create a sample QR code for the admin
+        # Create a sample QR code
         print("Creating sample QR code...")
         sample_qr = QRCode(
             name="Sample QR Code",
             target_url="https://example.com",
-            short_code="sample123",
-            user_id=admin.id
+            short_code="sample123"
         )
         db.session.add(sample_qr)
         db.session.commit()
@@ -46,7 +45,6 @@ def reset_database():
         print("\nDatabase reset successfully!")
         print(f"Admin user created with email: {admin_email}")
         print(f"Sample QR code created with short code: sample123")
-        print(f"Admin user ID: {admin.id}")
 
 if __name__ == "__main__":
     reset_database()

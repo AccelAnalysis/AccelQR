@@ -10,8 +10,6 @@ bp = Blueprint('stats', __name__, url_prefix='/api/stats')
 @bp.route('/dashboard', methods=['GET'])
 @jwt_required()
 def dashboard_stats():
-    current_user_id = get_jwt_identity()
-    
     # Get date range for last 30 days
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=30)
@@ -20,36 +18,30 @@ def dashboard_stats():
     daily_scans = db.session.query(
         func.date(Scan.timestamp).label('date'),
         func.count(Scan.id).label('count')
-    ).join(QRCode).filter(
-        and_(
-            QRCode.user_id == current_user_id,
-            Scan.timestamp.between(start_date, end_date)
-        )
+    ).filter(
+        Scan.timestamp.between(start_date, end_date)
     ).group_by(
         func.date(Scan.timestamp)
     ).order_by(
         func.date(Scan.timestamp)
     ).all()
     
-    # Format daily scans for response
+    # Format daily scans for the frontend
     formatted_daily_scans = [
         {'date': date.isoformat(), 'count': count}
         for date, count in daily_scans
     ]
     
-    # Get total scans and QR codes
-    total_scans = db.session.query(func.count(Scan.id)).join(QRCode).filter(
-        QRCode.user_id == current_user_id
-    ).scalar() or 0
+    # Get total scans
+    total_scans = db.session.query(func.count(Scan.id)).scalar() or 0
     
-    total_qrcodes = QRCode.query.filter_by(user_id=current_user_id).count()
+    # Get total QR codes
+    total_qrcodes = db.session.query(func.count(QRCode.id)).scalar() or 0
     
-    # Get top performing QR codes
-    top_qrcodes = QRCode.query.outerjoin(Scan).filter(
-        QRCode.user_id == current_user_id
-    ).group_by(QRCode.id).order_by(
-        func.count(Scan.id).desc()
-    ).limit(5).all()
+    # Get top 5 most scanned QR codes
+    top_qrcodes = QRCode.query\
+        .order_by(db.func.array_length(QRCode.scans, 1).desc())\
+        .limit(5).all()
     
     formatted_top_qrcodes = [{
         'id': qr.id,

@@ -1,9 +1,8 @@
-from flask import Flask, jsonify, request, send_from_directory, redirect, url_for
+from flask import Flask, jsonify, request, send_from_directory, redirect, url_for, session
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-from flask_jwt_extended import JWTManager, jwt_required
-from datetime import timedelta, datetime
+from werkzeug.security import check_password_hash, generate_password_hash
+from datetime import datetime, timedelta
 import os
 import logging
 from dotenv import load_dotenv
@@ -15,6 +14,7 @@ import uuid
 import geoip2.database
 from user_agents import parse
 from sqlalchemy import text, inspect
+from functools import wraps
 
 # Configure logging
 log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
@@ -33,15 +33,34 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize extensions
-db = None
+db = SQLAlchemy()
+
+# Simple authentication decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session:
+            return jsonify({"error": "Authentication required"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Initialize extensions
+db = SQLAlchemy()
 migrate = None
 jwt = None
 
+# Create the app
+app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
+
+# Initialize database
+db.init_app(app)
+
 def create_app():
     """Create and configure the Flask application."""
-    
-    # Initialize Flask app
-    app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
+    global app, db
+    # Use existing app or create new one if not in app context
+    if 'app' not in globals():
+        app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
     
     # Configuration
     # Get database URL from environment variable (required)
@@ -81,82 +100,54 @@ def create_app():
             SQLALCHEMY_TRACK_MODIFICATIONS=False
         )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this')
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = 3600  # 1 hour
-    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = 2592000  # 30 days
     
-    # Initialize SQLAlchemy
-    from models import db, User
-    db.init_app(app)
+    # Database is already initialized at module level
     
-    # Initialize JWT
-    jwt = JWTManager(app)
+    # Configure session
+    app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
+    app.permanent_session_lifetime = timedelta(days=1)
     
-    # Initialize Flask-Migrate
-    migrate = Migrate(app, db)
-    
-    # Initialize database
+    # Create tables if they don't exist
     with app.app_context():
-        # Verify database connection
-        try:
-            db.engine.connect()
-            print("✓ Successfully connected to PostgreSQL database")
+        # Create all tables if they don't exist
+        db.create_all()
+        
+        # Check if admin_credentials table exists
+        inspector = db.inspect(db.engine)
+        if 'admin_credentials' in inspector.get_table_names():
+            # Initialize admin password if not set
+            admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
+            result = db.session.execute(
+                "SELECT 1 FROM admin_credentials LIMIT 1"
+            ).fetchone()
             
-            # Log database information
-            if 'sqlite' in db.engine.url.drivername:
-                db_version = 'SQLite ' + db.session.execute(text("SELECT sqlite_version();")).scalar()
-            else:
-                db_version = db.session.execute(text("SELECT version();")).scalar()
-            print(f"Database version: {db_version}")
-            
-            # Log all tables
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            print(f"Database tables: {', '.join(tables) if tables else 'No tables found'}")
-            
-            # Create admin user if it doesn't exist
-            admin_email = "jholman@accelanalysis.com"
-            admin = User.query.filter_by(email=admin_email).first()
-            
-            if not admin:
-                print("Creating admin user...")
-                admin = User(
-                    email=admin_email,
-                    is_admin=True
+            if not result:
+                password_hash = generate_password_hash(admin_password)
+                db.session.execute(
+                    "INSERT INTO admin_credentials (password_hash) VALUES (:hash)",
+                    {'hash': password_hash}
                 )
-                admin.set_password("Missions1!")
-                db.session.add(admin)
                 db.session.commit()
-                print("Admin user created successfully")
-            
-        except Exception as e:
-            print(f"❌ Failed to initialize database: {str(e)}")
-            raise
+                logger.info("Initialized admin password")
     
-    # Configure CORS - Allow all origins for testing
+    # Import blueprints
+    from auth_routes import bp as auth_bp
+    
+    # Register blueprints
+    app.register_blueprint(auth_bp)
+    
+    # Configure CORS
     CORS(app, resources={
         r"/*": {
-            "origins": "*",  # Allow all origins for testing
+            "origins": "*",
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"],
+            "allow_headers": ["Content-Type"],
             "supports_credentials": True
         }
     })
     
-    # Import blueprints after db initialization to avoid circular imports
-    from auth import auth_bp
-    from routes.qrcodes import bp as qrcodes_bp
-    from routes.stats import bp as stats_bp
-    
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(qrcodes_bp)
-    app.register_blueprint(stats_bp)
-    
-    # Create the routes directory if it doesn't exist
-    os.makedirs(os.path.join(os.path.dirname(__file__), 'routes'), exist_ok=True)
-    
     # Import models after app creation to avoid circular imports
-    from models import QRCode, Scan, User
+    from models import db, QRCode, Scan
     
     # Routes
     @app.route('/api/health')
@@ -191,8 +182,7 @@ def create_app():
             name=data.get('name', 'Untitled'),
             target_url=data['target_url'],
             short_code=short_code,
-            folder=data.get('folder'),
-            user_id=get_jwt_identity()
+            folder=data.get('folder')
         )
         
         db.session.add(qr_code)
@@ -240,8 +230,7 @@ def create_app():
     @app.route('/api/qrcodes', methods=['GET'])
     @jwt_required()
     def get_qrcodes():
-        user_id = get_jwt_identity()
-        qrcodes = QRCode.query.filter_by(user_id=user_id).all()
+        qrcodes = QRCode.query.all()
         
         return jsonify([{
             'id': qr.id,
@@ -257,8 +246,7 @@ def create_app():
     @app.route('/api/qrcodes/<int:qrcode_id>', methods=['GET'])
     @jwt_required()
     def get_qrcode(qrcode_id):
-        user_id = get_jwt_identity()
-        qr = QRCode.query.filter_by(id=qrcode_id, user_id=user_id).first_or_404()
+        qr = QRCode.query.get_or_404(qrcode_id)
         
         return jsonify({
             'id': qr.id,
@@ -282,8 +270,7 @@ def create_app():
     @app.route('/api/qrcodes/<int:qrcode_id>', methods=['DELETE'])
     @jwt_required()
     def delete_qrcode(qrcode_id):
-        user_id = get_jwt_identity()
-        qr = QRCode.query.filter_by(id=qrcode_id, user_id=user_id).first_or_404()
+        qr = QRCode.query.get_or_404(qrcode_id)
         
         db.session.delete(qr)
         db.session.commit()
@@ -301,7 +288,7 @@ def create_app():
     
     return app
 
-# Create the app
+# Initialize the app
 app = create_app()
 
 if __name__ == '__main__':

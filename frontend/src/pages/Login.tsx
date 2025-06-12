@@ -24,10 +24,21 @@ const Login: React.FC = () => {
         isClosable: true,
       });
       navigate('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error && 
+        typeof error === 'object' && 
+        'response' in error && 
+        error.response && 
+        typeof error.response === 'object' &&
+        'data' in error.response &&
+        error.response.data &&
+        typeof error.response.data === 'object' &&
+        'msg' in error.response.data ?
+        String(error.response.data.msg) : 'An error occurred';
+        
       toast({
         title: 'Login failed',
-        description: error.response?.data?.msg || 'An error occurred',
+        description: errorMessage,
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -75,13 +86,7 @@ const Login: React.FC = () => {
             Login
           </Button>
           
-          <Button
-            variant="link"
-            onClick={() => navigate('/register')}
-            mt={2}
-          >
-            Don't have an account? Register
-          </Button>
+          {/* Registration button removed as per requirements */}
         </VStack>
       </Box>
     </Container>

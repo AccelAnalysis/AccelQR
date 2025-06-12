@@ -14,13 +14,7 @@ def get_current_user():
 @bp.route('', methods=['GET'])
 @jwt_required()
 def get_qrcodes():
-    user = get_current_user()
-    if user.is_admin:
-        # If admin, get all QR codes
-        qrcodes = QRCode.query.all()
-    else:
-        # If regular user, only get their QR codes
-        qrcodes = QRCode.query.filter_by(user_id=user.id).all()
+    qrcodes = QRCode.query.all()
     
     return jsonify([{
         'id': qr.id,
@@ -29,21 +23,13 @@ def get_qrcodes():
         'target_url': qr.target_url,
         'created_at': qr.created_at.isoformat(),
         'scan_count': len(qr.scans),
-        'folder': qr.folder,
-        'user_id': qr.user_id,  # Include user_id in the response
-        'user_email': qr.user.email if qr.user else None  # Include user email
+        'folder': qr.folder
     } for qr in qrcodes])
 
 @bp.route('/<int:qrcode_id>', methods=['GET'])
 @jwt_required()
 def get_qrcode(qrcode_id):
-    user = get_current_user()
-    if user.is_admin:
-        # If admin, can access any QR code
-        qrcode = QRCode.query.get_or_404(qrcode_id)
-    else:
-        # If regular user, can only access their own QR codes
-        qrcode = QRCode.query.filter_by(id=qrcode_id, user_id=user.id).first_or_404()
+    qrcode = QRCode.query.get_or_404(qrcode_id)
     
     return jsonify({
         'id': qrcode.id,
@@ -51,8 +37,6 @@ def get_qrcode(qrcode_id):
         'short_code': qrcode.short_code,
         'target_url': qrcode.target_url,
         'created_at': qrcode.created_at.isoformat(),
-        'user_id': qrcode.user_id,  # Include user_id in the response
-        'user_email': qrcode.user.email if qrcode.user else None,  # Include user email
         'scans': [{
             'id': scan.id,
             'timestamp': scan.timestamp.isoformat(),
@@ -68,13 +52,38 @@ def get_qrcode(qrcode_id):
             'time_on_page': scan.time_on_page,
             'scrolled': scan.scrolled,
             'scan_method': scan.scan_method
-        } for scan in qrcode.scans]
+        } for scan in qrcode.scans],
+        'short_url': f"{request.host_url}r/{qrcode.short_code}"
     })
+
+@bp.route('/<int:qrcode_id>', methods=['PUT'])
+@jwt_required()
+def update_qrcode(qrcode_id):
+    data = request.get_json()
+    qrcode = QRCode.query.get_or_404(qrcode_id)
+    
+    if 'name' in data:
+        qrcode.name = data['name']
+    if 'target_url' in data:
+        qrcode.target_url = data['target_url']
+    if 'folder' in data:
+        qrcode.folder = data['folder']
+    
+    db.session.commit()
+    
+    return jsonify({
+        'id': qrcode.id,
+        'name': qrcode.name,
+        'target_url': qrcode.target_url,
+        'short_code': qrcode.short_code,
+        'folder': qrcode.folder,
+        'created_at': qrcode.created_at.isoformat(),
+        'scan_count': len(qrcode.scans)
+    }), 201
 
 @bp.route('', methods=['POST'])
 @jwt_required()
 def create_qrcode():
-    current_user_id = get_jwt_identity()
     data = request.get_json()
     
     if not data or not data.get('target_url'):
@@ -84,8 +93,7 @@ def create_qrcode():
         name=data.get('name', 'Untitled QR Code'),
         target_url=data['target_url'],
         short_code=str(uuid.uuid4())[:8],
-        folder=data.get('folder'),
-        user_id=current_user_id
+        folder=data.get('folder')
     )
     
     db.session.add(qrcode)
