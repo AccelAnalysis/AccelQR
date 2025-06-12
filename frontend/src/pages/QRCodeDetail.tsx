@@ -66,6 +66,8 @@ interface QRCode {
   created_at: string;
   scan_count: number;
   folder: string | null;
+  qr_code_image?: string;
+  short_url?: string;
 }
 
 interface ScanData {
@@ -386,7 +388,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
             <Box>
               <Box 
                 as="img"
-                src={`${API_URL}/qrcodes/${qrCode.short_code}/image`}
+                src={qrCode.qr_code_image}
                 alt={`QR Code for ${qrCode.name}`}
                 maxW="100%"
                 maxH="300px"
