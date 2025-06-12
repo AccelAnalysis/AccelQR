@@ -39,16 +39,24 @@ def dashboard_stats():
     total_qrcodes = db.session.query(func.count(QRCode.id)).scalar() or 0
     
     # Get top 5 most scanned QR codes
-    top_qrcodes = QRCode.query\
-        .order_by(db.func.array_length(QRCode.scans, 1).desc())\
-        .limit(5).all()
-    
-    formatted_top_qrcodes = [{
-        'id': qr.id,
-        'name': qr.name,
-        'scan_count': len(qr.scans),
-        'short_code': qr.short_code
-    } for qr in top_qrcodes]
+    top_qrcodes = (
+        db.session.query(QRCode, func.count(Scan.id).label('scan_count'))
+        .outerjoin(Scan, QRCode.id == Scan.qr_code_id)
+        .group_by(QRCode.id)
+        .order_by(func.count(Scan.id).desc())
+        .limit(5)
+        .all()
+    )
+
+    formatted_top_qrcodes = [
+        {
+            'id': qr.id,
+            'name': qr.name,
+            'scan_count': scan_count,
+            'short_code': qr.short_code
+        }
+        for qr, scan_count in top_qrcodes
+    ]
     
     return jsonify({
         'scans': formatted_daily_scans,
