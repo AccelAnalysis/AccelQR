@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 # Database and JWT are now initialized in extensions.py
 migrate = None
-jwt = None
 
 def login_required(f):
     @wraps(f)
