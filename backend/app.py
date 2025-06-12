@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, send_from_directory, redirect, url_for, session
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 import os
@@ -88,9 +89,14 @@ def create_app():
     # Initialize extensions with app
     db.init_app(app)
     
-    # Configure session
+    # Configure session and JWT
     app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
     app.permanent_session_lifetime = timedelta(days=1)
+    
+    # Initialize JWT
+    JWTManager(app)
     
     # Import and register blueprints
     from routes import qrcodes as qrcodes_blueprint
