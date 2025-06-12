@@ -1,15 +1,13 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, QRCode, Scan, User
+from flask_jwt_extended import jwt_required
+from models import db, QRCode, Scan
 from datetime import datetime, timedelta
 from sqlalchemy import func, and_
 import uuid
 
 bp = Blueprint('qrcodes', __name__, url_prefix='/api/qrcodes')
 
-def get_current_user():
-    user_id = get_jwt_identity()
-    return User.query.get(user_id)
+# No user-specific filtering
 
 @bp.route('', methods=['GET'])
 @jwt_required()
