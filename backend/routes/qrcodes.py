@@ -54,6 +54,38 @@ def get_qrcode(qrcode_id):
         'short_url': f"{request.host_url}r/{qrcode.short_code}"
     })
 
+# New endpoint to fetch QR code by short_code
+@bp.route('/shortcode/<short_code>', methods=['GET'])
+@jwt_required()
+def get_qrcode_by_short_code(short_code):
+    from io import BytesIO
+    import qrcode as qrcode_lib
+    import base64
+    qrcode = QRCode.query.filter_by(short_code=short_code).first_or_404()
+    # Generate QR code image
+    qr = qrcode_lib.QRCode(
+        version=1,
+        error_correction=qrcode_lib.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(qrcode.target_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+    return jsonify({
+        "id": qrcode.id,
+        "name": qrcode.name,
+        "short_code": qrcode.short_code,
+        "target_url": qrcode.target_url,
+        "folder": qrcode.folder,
+        "created_at": qrcode.created_at.isoformat(),
+        "qr_code_image": f"data:image/png;base64,{img_str}",
+        "short_url": f"{request.host_url}r/{short_code}"
+    })
+
 @bp.route('/<int:qrcode_id>', methods=['PUT'])
 @jwt_required()
 def update_qrcode(qrcode_id):
