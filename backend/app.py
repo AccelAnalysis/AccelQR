@@ -37,12 +37,6 @@ logger = logging.getLogger(__name__)
 # Database and JWT are now initialized in extensions.py
 migrate = None
 
-# Debug: Log Authorization header for every request
-import logging
-from flask import request
-@app.before_request
-def log_auth_header():
-    logging.info(f"Authorization header: {request.headers.get('Authorization')}")
 
 def login_required(f):
     @wraps(f)
@@ -57,6 +51,11 @@ def create_app():
     # Create the app
     app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
     
+    # Debug: Log Authorization header for every request
+    @app.before_request
+    def log_auth_header():
+        logging.info(f"Authorization header: {request.headers.get('Authorization')}")
+
     # Configure database
     db_uri = os.getenv('DATABASE_URL')
     if not db_uri:
