@@ -527,12 +527,11 @@ const Dashboard = () => {
       {/* New Folder Creation UI */}
       <Box mb={4}>
         <form onSubmit={handleCreateFolderNew} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Input
+          <input
             placeholder="New Folder Name"
             value={newFolderName}
-            onChange={e => setNewFolderName(e.target.value)}
-            size="sm"
-            width="auto"
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewFolderName(e.target.value)}
+            style={{ padding: 4, borderRadius: 4, border: '1px solid #CBD5E0', fontSize: 14 }}
           />
           <Button type="submit" size="sm" colorScheme="teal">Create Folder (New)</Button>
         </form>
