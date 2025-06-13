@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
-from models import db, QRCode
+from models import QRCode
 
 bp = Blueprint('folders', __name__, url_prefix='/api/folders')
 
