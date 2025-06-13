@@ -26,7 +26,7 @@ import {
   MenuList,
   MenuItem,
   IconButton
-} from '@chakra-ui/react';
+ } from '@chakra-ui/react';
 import { FiRefreshCw, FiDownload, FiCode, FiBarChart2, FiTrendingUp, FiMoreHorizontal } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Link as RouterLink } from 'react-router-dom';
@@ -38,7 +38,8 @@ const ENDPOINTS = {
   QR_CODES: `${API_URL}/qrcodes`,
   FOLDERS: `${API_URL}/folders`,
   STATS: `${API_URL}/stats`,
-  STATS_DASHBOARD: `${API_URL}/stats/dashboard`
+  STATS_DASHBOARD: `${API_URL}/stats/dashboard`,
+  EXPORT_QRCODES: `${API_URL}/export/qrcodes`
 } as const;
 
 interface QRCode {
@@ -96,8 +97,7 @@ const Dashboard = () => {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<string>('30d');
-  const [isExporting, setIsExporting] = useState(false);
-  const [searchTerm] = useState('');
+  const [newFolderName, setNewFolderName] = useState('');
   const toast = useToast();
   
   // Time range options for the dashboard - memoized to prevent unnecessary re-renders
@@ -142,8 +142,9 @@ const Dashboard = () => {
       const response = await axios.get(ENDPOINTS.QR_CODES);
       setQRCodes(response.data);
       return response.data;
-    } catch (error) {
-      console.error('Error fetching QR codes:', error);
+    } catch {
+
+      console.error('Error fetching QR codes');
       toast({
         title: 'Error',
         description: 'Failed to load QR codes',
@@ -176,8 +177,9 @@ const Dashboard = () => {
       
       setDashboardStats(response.data);
       return response.data;
-    } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
+    } catch {
+
+      console.error('Error fetching dashboard stats');
       toast({
         title: 'Error',
         description: 'Failed to load dashboard statistics',
@@ -200,7 +202,7 @@ const Dashboard = () => {
       ]);
     };
     loadData();
-  }, [activeFolder, timeRange, fetchDashboardStats, fetchQRCodes]);
+  }, [activeFolder, timeRange, fetchQRCodes, fetchDashboardStats]);
   
   // Refresh data function
   const refreshData = useCallback(() => {
@@ -209,55 +211,60 @@ const Dashboard = () => {
       fetchDashboardStats(activeFolder, timeRange)
     ]);
   }, [activeFolder, timeRange, fetchQRCodes, fetchDashboardStats]);
-  
-  // Handle export functionality
-  const handleExport = useCallback(async () => {
+
+  // Export single QR code (new endpoint)
+  const handleExportNew = useCallback(async (id: number) => {
     try {
-      setIsExporting(true);
-      const params = new URLSearchParams();
-      if (activeFolder && activeFolder !== 'All QR Codes') {
-        params.append('folder', activeFolder);
-      }
-      
-      // Use the correct endpoint for exporting data
-      const response = await axios.get(`${ENDPOINTS.STATS_DASHBOARD}/export`, {
-        responseType: 'blob',
-        params
-      });
-      
-      // Create a download link and trigger the download
+      const response = await axios.get(`${API_URL}/newstats/qrcode/${id}/quickstats`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `qrcodes-export-${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `qrcode-export-${id}-${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      
-      // Clean up the URL object
       window.URL.revokeObjectURL(url);
-      
-      toast({
-        title: 'Export successful',
-        description: 'QR codes have been exported successfully',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
-    } catch (error) {
-      console.error('Error exporting QR codes:', error);
-      toast({
-        title: 'Export failed',
-        description: 'Failed to export QR codes. Please try again.',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  }, [activeFolder, toast]);
+      toast({ title: 'Export successful', description: 'QR code exported.', status: 'success', duration: 3000, isClosable: true });
+    } catch {
 
+      toast({ title: 'Export failed', description: 'Failed to export QR code.', status: 'error', duration: 5000, isClosable: true });
+    }
+  }, [toast]);
+
+  // Folder-level export (new endpoint)
+  const handleExportFolderNew = useCallback(async (folder: string) => {
+    try {
+      const response = await axios.get(`${API_URL}/newstats/export?folder=${encodeURIComponent(folder)}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `folder-export-${folder}-${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast({ title: 'Export successful', description: `Folder ${folder} exported.`, status: 'success', duration: 3000, isClosable: true });
+    } catch {
+
+      toast({ title: 'Export failed', description: 'Failed to export folder.', status: 'error', duration: 5000, isClosable: true });
+    }
+  }, [toast]);
+
+  // Folder creation (new endpoint)
+  const handleCreateFolderNew = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    try {
+      await axios.post(`${API_URL}/newstats/folders`, { name: newFolderName });
+      toast({ title: 'Folder created', description: `Folder "${newFolderName}" created.`, status: 'success', duration: 3000, isClosable: true });
+      setNewFolderName('');
+      refreshData();
+    } catch {
+
+      toast({ title: 'Error', description: 'Could not create folder.', status: 'error', duration: 5000, isClosable: true });
+    }
+  }, [newFolderName, toast, refreshData]);
+  
   // Sort configuration state
   const [sortConfig, setSortConfig] = useState<{
     key: SortableField;
@@ -287,13 +294,10 @@ const Dashboard = () => {
   const sortedQRCodes = useMemo(() => {
     const sortableItems = [...qrcodes];
     
-    // Filter by active folder and search term
+    // Filter by active folder
     const filtered = sortableItems.filter(qr => {
-      const matchesSearch = searchTerm === '' || 
-        qr.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        qr.short_code.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesFolder = !activeFolder || qr.folder === activeFolder;
-      return matchesSearch && matchesFolder;
+      return matchesFolder;
     });
 
     // Sort the filtered results
@@ -320,7 +324,7 @@ const Dashboard = () => {
       }
       return 0;
     });
-  }, [qrcodes, sortConfig, searchTerm, activeFolder]);
+  }, [qrcodes, sortConfig, activeFolder]);
 
   // QR Code Table component
   const QRCodeTable = useMemo(() => {
@@ -418,6 +422,9 @@ const Dashboard = () => {
                   />
                   <MenuList>
                     <MenuItem as={RouterLink} to={`/qrcodes/${qr.id}`}>View Stats</MenuItem>
+                    <MenuItem as={RouterLink} to={`/newstats/${qr.id}`}>New Stats View</MenuItem>
+                    <MenuItem onClick={() => handleExportNew(qr.id)} icon={<FiDownload />}>Export (New)</MenuItem>
+                    <MenuItem onClick={() => handleExportFolderNew(qr.folder || '')} icon={<FiDownload />}>Export Folder (New)</MenuItem>
                   </MenuList>
                 </Menu>
               </Td>
@@ -426,8 +433,8 @@ const Dashboard = () => {
         </Tbody>
       </Table>
     );
-  }, [loading, sortedQRCodes, activeFolder, requestSort, getSortIndicator, formatNumber, formatDate]);
-  
+  }, [loading, sortedQRCodes, activeFolder, requestSort, getSortIndicator, formatNumber, formatDate, handleExportNew, handleExportFolderNew]);
+
   // Dashboard stats component
   const DashboardStatsCard = useMemo(() => {
     if (!dashboardStats) return null;
@@ -507,17 +514,7 @@ const Dashboard = () => {
     <Box p={6}>
       <Flex justify="space-between" align="center" mb={6}>
         <Heading size="lg">Dashboard</Heading>
-        <HStack spacing={4}>
-          <Button 
-            leftIcon={<FiDownload />} 
-            onClick={handleExport}
-            isLoading={isExporting}
-            loadingText="Exporting..."
-            colorScheme="blue"
-            variant="outline"
-          >
-            Export Data
-          </Button>
+        <HStack spacing={4} mb={4}>
           <Button 
             leftIcon={<FiRefreshCw />} 
             onClick={refreshData}
@@ -527,6 +524,20 @@ const Dashboard = () => {
             Refresh
           </Button>
         </HStack>
+      {/* New Folder Creation UI */}
+      <Box mb={4}>
+        <form onSubmit={handleCreateFolderNew} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Input
+            placeholder="New Folder Name"
+            value={newFolderName}
+            onChange={e => setNewFolderName(e.target.value)}
+            size="sm"
+            width="auto"
+          />
+          <Button type="submit" size="sm" colorScheme="teal">Create Folder (New)</Button>
+        </form>
+      </Box>
+
       </Flex>
       
       <Flex>
