@@ -4,6 +4,11 @@ Revision ID: 2025_06_12_remove_user_id_from_qrcodes
 Revises: 2025_06_11_add_user_id_to_qrcodes
 Create Date: 2025-06-12 12:10:00.000000
 """
+revision = '2025_06_12_remove_user_id_from_qrcodes'
+down_revision = '2025_06_11_add_user_id_to_qrcodes'
+branch_labels = None
+depends_on = None
+
 from alembic import op
 import sqlalchemy as sa
 

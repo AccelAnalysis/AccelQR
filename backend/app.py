@@ -35,7 +35,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Database and JWT are now initialized in extensions.py
-migrate = None
+from flask_migrate import Migrate
 
 
 def login_required(f):
@@ -60,15 +60,17 @@ def create_app():
     db_uri = os.getenv('DATABASE_URL')
     if not db_uri:
         raise ValueError("No DATABASE_URL environment variable set. Please configure your database.")
-    
-    # Ensure PostgreSQL URL format is correct
     if db_uri.startswith('postgres://'):
         db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
-    
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+
+    # Initialize Flask-Migrate
+    db.init_app(app)
+    Migrate(app, db)
+
     # Database configuration
     if 'postgresql' in db_uri:
         app.config.update(
-            SQLALCHEMY_DATABASE_URI=db_uri,
             SQLALCHEMY_ENGINE_OPTIONS={
                 'pool_pre_ping': True,
                 'pool_recycle': 300,
@@ -90,9 +92,6 @@ def create_app():
             SQLALCHEMY_DATABASE_URI=db_uri,
             SQLALCHEMY_TRACK_MODIFICATIONS=False
         )
-    
-    # Initialize extensions with app
-    db.init_app(app)
     
     # Configure session and JWT
     app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')

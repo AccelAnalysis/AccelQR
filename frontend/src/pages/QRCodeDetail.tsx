@@ -165,9 +165,9 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
     try {
       setLoading(true);
       const [qrResponse, statsResponse, enhancedStatsResponse] = await Promise.all([
-        axios.get(`${API_URL}/qrcodes/shortcode/${id}`),
-        axios.get(`${API_URL}/qrcodes/${id}/stats`),
-        axios.get(`${API_URL}/qrcodes/${id}/enhanced-stats`)
+        axios.get(`${API_URL}/qrcodes/flex/${id}`),
+        axios.get(`${API_URL}/qrcodes/flex/${id}/stats`),
+        axios.get(`${API_URL}/qrcodes/flex/${id}/enhanced-stats`)
       ]);
       
       setQRCode(qrResponse.data);
