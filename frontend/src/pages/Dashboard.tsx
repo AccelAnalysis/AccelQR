@@ -20,9 +20,14 @@ import {
   Badge,
   Link as ChakraLink,
   Select,
-  SimpleGrid
+  SimpleGrid,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  IconButton
 } from '@chakra-ui/react';
-import { FiRefreshCw, FiDownload, FiCode, FiBarChart2, FiTrendingUp } from 'react-icons/fi';
+import { FiRefreshCw, FiDownload, FiCode, FiBarChart2, FiTrendingUp, FiMoreHorizontal } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Link as RouterLink } from 'react-router-dom';
 import axios from 'axios';
@@ -377,6 +382,9 @@ const Dashboard = () => {
             >
               Folder {getSortIndicator('folder')}
             </Th>
+            <Th>
+              {/* Actions column */}
+            </Th>
           </Tr>
         </Thead>
         <Tbody>
@@ -398,6 +406,20 @@ const Dashboard = () => {
                 ) : (
                   <Badge colorScheme="gray">No Folder</Badge>
                 )}
+              </Td>
+              <Td>
+                <Menu>
+                  <MenuButton
+                    as={IconButton}
+                    aria-label="More options"
+                    icon={<FiMoreHorizontal />}
+                    variant="ghost"
+                    size="sm"
+                  />
+                  <MenuList>
+                    <MenuItem as={RouterLink} to={`/qrcodes/${qr.id}`}>View Stats</MenuItem>
+                  </MenuList>
+                </Menu>
               </Td>
             </Tr>
           ))}

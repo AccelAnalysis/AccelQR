@@ -4,6 +4,7 @@ from models import db, QRCode, Scan, User
 from datetime import datetime, timedelta
 from sqlalchemy import func, and_, extract
 from collections import defaultdict
+import csv
 
 bp = Blueprint('stats', __name__, url_prefix='/api/stats')
 
