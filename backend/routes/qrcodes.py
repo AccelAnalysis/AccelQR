@@ -54,6 +54,42 @@ def get_qrcode(qrcode_id):
         'short_url': f"{request.host_url}r/{qrcode.short_code}"
     })
 
+# Flexible endpoint to fetch QR code by id or short_code
+@bp.route('/flex/<identifier>', methods=['GET'])
+@jwt_required()
+def get_qrcode_flexible(identifier):
+    qrcode = None
+    if identifier.isdigit():
+        qrcode = QRCode.query.get(identifier)
+    if not qrcode:
+        qrcode = QRCode.query.filter_by(short_code=identifier).first()
+    if not qrcode:
+        return jsonify({'msg': 'QR code not found'}), 404
+    return jsonify({
+        'id': qrcode.id,
+        'name': qrcode.name,
+        'short_code': qrcode.short_code,
+        'target_url': qrcode.target_url,
+        'created_at': qrcode.created_at.isoformat(),
+        'scans': [{
+            'id': scan.id,
+            'timestamp': scan.timestamp.isoformat(),
+            'ip_address': scan.ip_address,
+            'user_agent': scan.user_agent,
+            'country': scan.country,
+            'region': scan.region,
+            'city': scan.city,
+            'device_type': scan.device_type,
+            'os_family': scan.os_family,
+            'browser_family': scan.browser_family,
+            'referrer_domain': scan.referrer_domain,
+            'time_on_page': scan.time_on_page,
+            'scrolled': scan.scrolled,
+            'scan_method': scan.scan_method
+        } for scan in qrcode.scans],
+        'short_url': f"{request.host_url}r/{qrcode.short_code}"
+    })
+
 # New endpoint to fetch QR code by short_code
 @bp.route('/shortcode/<short_code>', methods=['GET'])
 @jwt_required()
