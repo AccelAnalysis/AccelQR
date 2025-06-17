@@ -14,8 +14,11 @@ class QRCode(db.Model):
     short_code = db.Column(db.String(10), unique=True, nullable=False)
     folder = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
     # Relationships
     scans = db.relationship('Scan', backref='qrcode', lazy=True, cascade="all, delete-orphan")
+    user = db.relationship('User', backref=db.backref('qrcodes', lazy=True))
 
 class Scan(db.Model):
     __tablename__ = 'scans'

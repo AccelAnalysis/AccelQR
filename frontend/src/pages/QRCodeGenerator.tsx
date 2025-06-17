@@ -51,7 +51,10 @@ const QRCodeGenerator = () => {
 
   const fetchFolders = useCallback(async () => {
     try {
-      const response = await axios.get(ENDPOINTS.FOLDERS);
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(`${API_URL}/folders`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       setFolders(response.data);
       setIsLoadingFolders(false);
     } catch (error) {

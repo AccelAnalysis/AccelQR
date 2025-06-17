@@ -62,6 +62,8 @@ def create_app():
         raise ValueError("No DATABASE_URL environment variable set. Please configure your database.")
     if db_uri.startswith('postgres://'):
         db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
+    print(f"[Startup] Using DATABASE_URL: {db_uri}")  # Added for debugging
+
     app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 
     # Initialize Flask-Migrate

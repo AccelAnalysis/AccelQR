@@ -164,10 +164,12 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
     
     try {
       setLoading(true);
+      const token = localStorage.getItem('access_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const [qrResponse, statsResponse, enhancedStatsResponse] = await Promise.all([
-        axios.get(`${API_URL}/qrcodes/flex/${id}`),
-        axios.get(`${API_URL}/qrcodes/flex/${id}/stats`),
-        axios.get(`${API_URL}/qrcodes/flex/${id}/enhanced-stats`)
+        axios.get(`${API_URL}/qrcodes/flex/${id}`, { headers }),
+        axios.get(`${API_URL}/qrcodes/${id}/stats`, { headers }),
+        axios.get(`${API_URL}/qrcodes/${id}/enhanced-stats`, { headers })
       ]);
       
       setQRCode(qrResponse.data);
@@ -196,7 +198,9 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
 
   const fetchFolders = useCallback(async () => {
     try {
-      const response = await axios.get(ENDPOINTS.FOLDERS);
+      const token = localStorage.getItem('access_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.get(ENDPOINTS.FOLDERS, { headers });
       setFolders(response.data);
     } catch (error) {
       console.error('Error fetching folders:', error);

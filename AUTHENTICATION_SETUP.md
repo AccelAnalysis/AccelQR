@@ -19,9 +19,27 @@ This guide will walk you through setting up the authentication system for the QR
 
 3. **Initialize the Database**
    ```bash
+   python init_db.py
+   ```
+   This will create the necessary tables and set up the initial admin user (using environment variables ADMIN_EMAIL and ADMIN_PASSWORD).
+
+4. **(Optional) Run Database Migrations**
+   ```bash
+   python migrate_db.py
+   ```
+   Use this to apply schema changes tracked in the migrations directory.
+
+5. **(Optional) Reset the Database**
+   ```bash
+   python reset_db.py
+   ```
+   This will drop and recreate all tables, useful for development or testing.
+
+6. **(Optional) Create/Reset Admin User**
+   ```bash
    python create_admin.py
    ```
-   This will create the necessary tables and prompt you to create an admin user.
+   Use this to create or reset the admin user as needed.
 
 4. **Run the Backend Server**
    ```bash

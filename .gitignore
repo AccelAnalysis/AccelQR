@@ -39,6 +39,24 @@ yarn-error.log*
 /frontend/.svelte-kit/
 /frontend/package-lock.json
 
+# Deprecated backend scripts (do not deploy)
+backend/init_database.py
+backend/run_db_migration.py
+backend/run_migration.py
+backend/run_migrations.py
+backend/apply_migration.py
+backend/migrate_postgres.py
+backend/migrate_sqlite.py
+backend/reset_database.py
+backend/create_test_user.py
+backend/create_test_user2.py
+backend/check_db.py
+backend/check_db_tables.py
+backend/check_schema.py
+backend/debug_db.py
+backend/debug_db_connection.py
+backend/touchfile
+
 # IDE
 .vscode/
 .idea/

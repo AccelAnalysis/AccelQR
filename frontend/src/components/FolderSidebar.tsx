@@ -198,7 +198,10 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
 
   const fetchFolders = async () => {
     try {
-      const response = await axios.get(`${API_URL}/folders`);
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(`${API_URL}/folders`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       // Filter out any null or empty folder names
       const validFolders = response.data.filter((folder: string | null) => folder && folder.trim() !== '');
       setFolders(validFolders);

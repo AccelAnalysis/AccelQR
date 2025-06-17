@@ -165,20 +165,44 @@ const Dashboard = () => {
       if (folder && folder !== 'All QR Codes') {
         params.append('folder', folder);
       }
-      params.append('time_range', range);
-      
+
+      // Calculate start_date and end_date based on range
+      const now = new Date();
+      let startDate: Date;
+      const endDate: Date = now;
+      switch (range) {
+        case '24h':
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case '7d':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case '90d':
+          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        case 'all':
+          startDate = new Date(2000, 0, 1); // Arbitrary early date
+          break;
+        default:
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+      // Format to YYYY-MM-DD
+      const formatDate = (d: Date) => d.toISOString().slice(0, 10);
+      params.append('start_date', formatDate(startDate));
+      params.append('end_date', formatDate(endDate));
+
       const response = await axios.get(ENDPOINTS.STATS_DASHBOARD, { params });
-      
       // Validate the data structure
       if (!response.data || !Array.isArray(response.data.scans)) {
         console.error('Invalid data structure received:', response.data);
         throw new Error('Invalid data structure');
       }
-      
       setDashboardStats(response.data);
       return response.data;
     } catch {
-
       console.error('Error fetching dashboard stats');
       toast({
         title: 'Error',

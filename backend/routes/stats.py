@@ -11,10 +11,22 @@ bp = Blueprint('stats', __name__, url_prefix='/api/stats')
 @bp.route('/dashboard', methods=['GET'])
 @jwt_required()
 def dashboard_stats():
-    # Get date range for last 30 days
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=30)
-    
+    from flask import request
+    # Parse start_date and end_date from query params
+    date_format = '%Y-%m-%d'
+    try:
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        if start_date_str and end_date_str:
+            start_date = datetime.strptime(start_date_str, date_format)
+            end_date = datetime.strptime(end_date_str, date_format)
+        else:
+            end_date = datetime.utcnow()
+            start_date = end_date - timedelta(days=30)
+    except Exception:
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=30)
+
     # Get daily scan counts
     daily_scans = db.session.query(
         func.date(Scan.timestamp).label('date'),
@@ -26,23 +38,23 @@ def dashboard_stats():
     ).order_by(
         func.date(Scan.timestamp)
     ).all()
-    
+
     # Format daily scans for the frontend
     formatted_daily_scans = [
         {'date': date.isoformat(), 'count': count}
         for date, count in daily_scans
     ]
-    
-    # Get total scans
-    total_scans = db.session.query(func.count(Scan.id)).scalar() or 0
-    
-    # Get total QR codes
+
+    # Get total scans (within range)
+    total_scans = db.session.query(func.count(Scan.id)).filter(Scan.timestamp.between(start_date, end_date)).scalar() or 0
+
+    # Get total QR codes (all time)
     total_qrcodes = db.session.query(func.count(QRCode.id)).scalar() or 0
-    
-    # Get top 5 most scanned QR codes
+
+    # Get top 5 most scanned QR codes (within range)
     top_qrcodes = (
         db.session.query(QRCode, func.count(Scan.id).label('scan_count'))
-        .outerjoin(Scan, QRCode.id == Scan.qr_code_id)
+        .outerjoin(Scan, and_(QRCode.id == Scan.qr_code_id, Scan.timestamp.between(start_date, end_date)))
         .group_by(QRCode.id)
         .order_by(func.count(Scan.id).desc())
         .limit(5)
@@ -58,7 +70,7 @@ def dashboard_stats():
         }
         for qr, scan_count in top_qrcodes
     ]
-    
+
     return jsonify({
         'scans': formatted_daily_scans,
         'total_scans': total_scans,
