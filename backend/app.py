@@ -50,6 +50,10 @@ def create_app():
     """Create and configure the Flask application."""
     # Create the app
     app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
+
+    # Debug: Print JWT secret key at startup
+    print("[DEBUG] JWT_SECRET_KEY:", os.environ.get("JWT_SECRET_KEY"))
+    logging.info(f"[DEBUG] JWT_SECRET_KEY: {os.environ.get('JWT_SECRET_KEY')}")
     
     # Debug: Log Authorization header for every request
     @app.before_request
