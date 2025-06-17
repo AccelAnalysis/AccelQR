@@ -1,8 +1,14 @@
 """
-Migration script to add the 'scans' table.
+add scans table
 """
 from alembic import op
 import sqlalchemy as sa
+
+# revision identifiers, used by Alembic.
+revision = '2025_06_17_add_scans_table'
+down_revision = 'baseline_user_id_20250617'
+branch_labels = None
+depends_on = None
 
 def upgrade():
     op.create_table(
