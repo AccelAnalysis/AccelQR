@@ -53,7 +53,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         
         // Try to get the current user
-        const response = await axios.get(`${API_BASE_URL}/me`);
+        const response = await axios.get(`${API_BASE_URL}/api/me`);
         setUser(response.data);
       } catch (error) {
         console.error('Auth check failed', error);
@@ -71,7 +71,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
+      const response = await axios.post(`${API_BASE_URL}/api/login`, { email, password });
       const { access_token, refresh_token, user } = response.data;
       
       if (!access_token) {
@@ -93,7 +93,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (email: string, password: string) => {
     try {
-      await axios.post(`${API_BASE_URL}/auth/register`, { email, password });
+      await axios.post(`${API_BASE_URL}/api/register`, { email, password });
       await login(email, password);
     } catch (error) {
       console.error('Registration failed:', error);
