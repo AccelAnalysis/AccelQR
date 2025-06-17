@@ -72,6 +72,7 @@ def create_app():
 
     # Initialize Flask-Migrate
     db.init_app(app)
+    from flask_migrate import Migrate
     Migrate(app, db)
 
     # Database configuration
