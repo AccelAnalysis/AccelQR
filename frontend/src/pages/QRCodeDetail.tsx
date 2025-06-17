@@ -164,7 +164,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
     
     try {
       setLoading(true);
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('token');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const [qrResponse, statsResponse, enhancedStatsResponse] = await Promise.all([
         axios.get(`${API_URL}/qrcodes/flex/${id}`, { headers }),
@@ -198,7 +198,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
 
   const fetchFolders = useCallback(async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('token');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.get(ENDPOINTS.FOLDERS, { headers });
       setFolders(response.data);

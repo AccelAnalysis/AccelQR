@@ -139,7 +139,9 @@ const Dashboard = () => {
   const fetchQRCodes = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axios.get(ENDPOINTS.QR_CODES);
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.get(ENDPOINTS.QR_CODES, { headers });
       setQRCodes(response.data);
       return response.data;
     } catch {
@@ -194,7 +196,9 @@ const Dashboard = () => {
       params.append('start_date', formatDate(startDate));
       params.append('end_date', formatDate(endDate));
 
-      const response = await axios.get(ENDPOINTS.STATS_DASHBOARD, { params });
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.get(ENDPOINTS.STATS_DASHBOARD, { params, headers });
       // Validate the data structure
       if (!response.data || !Array.isArray(response.data.scans)) {
         console.error('Invalid data structure received:', response.data);
