@@ -114,7 +114,7 @@ def create_app():
     app.register_blueprint(qrcodes_bp, url_prefix='/api/qrcodes')
     from routes.stats import bp as stats_bp
     app.register_blueprint(stats_bp, url_prefix='/api/stats')
-    from auth import auth_bp
+    from auth_routes import bp as auth_bp
     app.register_blueprint(auth_bp, url_prefix='/api')
     from routes.folders import bp as folders_bp
     app.register_blueprint(folders_bp, url_prefix='/api/folders')
