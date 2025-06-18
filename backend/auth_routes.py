@@ -47,14 +47,14 @@ def login():
         "user": user.to_dict()
     }), 200
 
-@bp.route('/api/refresh', methods=['POST'])
+@bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 def refresh():
     current_user_id = get_jwt_identity()
     new_token = create_access_token(identity=current_user_id)
     return jsonify({"access_token": new_token}), 200
 
-@bp.route('/api/me', methods=['GET'])
+@bp.route('/me', methods=['GET'])
 @jwt_required()
 def get_current_user():
     current_user_id = get_jwt_identity()
@@ -63,7 +63,7 @@ def get_current_user():
         return jsonify({"msg": "User not found"}), 404
     return jsonify(user.to_dict())
 
-@bp.route('/api/logout', methods=['POST'])
+@bp.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
     # In a real app, you might want to add the token to a blacklist
