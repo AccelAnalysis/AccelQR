@@ -123,10 +123,10 @@ def create_app():
     from routes.qrcodes_stats import bp as qrcodes_stats_bp
     app.register_blueprint(qrcodes_stats_bp, url_prefix='/api/qrcodes')
     
-    # Configure CORS
+    # Configure CORS for production: only allow frontend domain and /api/*
     CORS(app, resources={
-        r"/*": {
-            "origins": "*",
+        r"/api/*": {
+            "origins": ["https://accelqr-1.onrender.com"],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"],
             "supports_credentials": True
