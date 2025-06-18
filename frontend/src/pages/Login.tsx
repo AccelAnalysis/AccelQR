@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Button, Container, FormControl, FormLabel, Input, VStack, Heading, useToast } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');

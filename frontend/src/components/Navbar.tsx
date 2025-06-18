@@ -1,6 +1,6 @@
 import { Box, Flex, Button, Heading, Container, Menu, MenuButton, MenuList, MenuItem, Avatar, Text, HStack } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { ChevronDownIcon } from '@chakra-ui/icons';
 
 const Navbar = () => {
