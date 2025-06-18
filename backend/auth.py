@@ -193,7 +193,7 @@ def login():
             "refresh_token": refresh_token,
             "user": {"id": user.id, "email": user.email, "is_admin": user.is_admin}
         }), 200
-        
+            
     except Exception as e:
         logger.error(f"Error during login: {str(e)}", exc_info=True)
         return jsonify({"msg": "An error occurred during login"}), 500
@@ -221,9 +221,7 @@ def get_current_user():
             "id": user.id,
             "email": user.email,
             "is_admin": user.is_admin
-        }), 200
-    except Exception as e:
+        except Exception as e:
         logger.error(f"/me endpoint error: {str(e)}", exc_info=True)
         return jsonify({"msg": "Internal server error"}), 500
 
-    }), 200
