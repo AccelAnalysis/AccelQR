@@ -39,12 +39,18 @@ def register_jwt_error_handlers(app):
 
     @app.errorhandler(jwt_exceptions.InvalidHeaderError)
     def handle_invalid_header(e):
-        logger.error(f"InvalidHeaderError: {str(e)}")
+        import traceback
+        from flask import request
+        logger.error(f"InvalidHeaderError: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"Request headers: {dict(request.headers)}")
         return jsonify({"msg": "Invalid Authorization Header"}), 422
 
     @app.errorhandler(jwt_exceptions.WrongTokenError)
     def handle_wrong_token(e):
-        logger.error(f"WrongTokenError: {str(e)}")
+        import traceback
+        from flask import request
+        logger.error(f"WrongTokenError: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"Request headers: {dict(request.headers)}")
         return jsonify({"msg": "Wrong token type"}), 422
 
     @app.errorhandler(jwt_exceptions.RevokedTokenError)
@@ -69,7 +75,10 @@ def register_jwt_error_handlers(app):
 
     @app.errorhandler(jwt_exceptions.JWTDecodeError)
     def handle_jwt_decode_error(e):
-        logger.error(f"JWTDecodeError: {str(e)}")
+        import traceback
+        from flask import request
+        logger.error(f"JWTDecodeError: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"Request headers: {dict(request.headers)}")
         return jsonify({"msg": "Malformed token"}), 422
 
     @app.errorhandler(jwt_exceptions.CSRFError)
