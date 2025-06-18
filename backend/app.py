@@ -108,6 +108,8 @@ def create_app():
     
     # Initialize JWT
     jwt.init_app(app)
+    from auth import register_jwt_error_handlers
+    register_jwt_error_handlers(app)
     
     # Import and register blueprints
     from routes.qrcodes import bp as qrcodes_bp
