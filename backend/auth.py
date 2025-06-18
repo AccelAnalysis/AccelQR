@@ -63,11 +63,6 @@ def register_jwt_error_handlers(app):
         logger.error(f"FreshTokenRequired: {str(e)}")
         return jsonify({"msg": "Fresh token required"}), 401
 
-    @app.errorhandler(jwt_exceptions.UserLoadError)
-    def handle_user_load_error(e):
-        logger.error(f"UserLoadError: {str(e)}")
-        return jsonify({"msg": "User not found"}), 404
-
     @app.errorhandler(jwt_exceptions.ExpiredSignatureError)
     def handle_expired_token(e):
         logger.error(f"ExpiredSignatureError: {str(e)}")
