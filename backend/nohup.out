@@ -1,0 +1,20 @@
+2025-06-17 15:26:32,784 - root - INFO - [DEBUG] JWT_SECRET_KEY: your-jwt-secret-key
+[DEBUG] JWT_SECRET_KEY: your-jwt-secret-key
+[Startup] Using DATABASE_URL: sqlite:///qrcodes.db
+ * Serving Flask app 'app.py'
+ * Debug mode: off
+2025-06-17 15:26:32,816 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.1.176:5001
+2025-06-17 15:26:32,816 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-06-17 15:35:32,614 - root - INFO - [DEBUG] JWT_SECRET_KEY: your-jwt-secret-key
+[DEBUG] JWT_SECRET_KEY: your-jwt-secret-key
+[Startup] Using DATABASE_URL: sqlite:///qrcodes.db
+ * Serving Flask app 'app.py'
+ * Debug mode: off
+2025-06-17 15:35:32,642 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.1.176:5001
+2025-06-17 15:35:32,642 - werkzeug - INFO - [33mPress CTRL+C to quit[0m

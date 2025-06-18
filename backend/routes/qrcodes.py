@@ -58,13 +58,29 @@ def get_qrcode(qrcode_id):
 @bp.route('/flex/<identifier>', methods=['GET'])
 @jwt_required()
 def get_qrcode_flexible(identifier):
-    qrcode = None
-    if identifier.isdigit():
+    qrcode = QRCode.query.filter_by(short_code=identifier).first()
+    if not qrcode and identifier.isdigit():
         qrcode = QRCode.query.get(identifier)
     if not qrcode:
-        qrcode = QRCode.query.filter_by(short_code=identifier).first()
-    if not qrcode:
         return jsonify({'msg': 'QR code not found'}), 404
+
+    # Generate QR code image as base64
+    from io import BytesIO
+    import qrcode as qrcode_lib
+    import base64
+    qr = qrcode_lib.QRCode(
+        version=1,
+        error_correction=qrcode_lib.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(qrcode.target_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+
     return jsonify({
         'id': qrcode.id,
         'name': qrcode.name,

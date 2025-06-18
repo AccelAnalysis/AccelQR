@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
+from flask_jwt_extended import exceptions as jwt_exceptions
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity, decode_token
 from models import User, db
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -26,6 +27,56 @@ logger = logging.getLogger(__name__)
 
 # Create auth blueprint
 auth_bp = Blueprint('auth', __name__)
+
+# --- JWT Error Handlers ---
+from flask_jwt_extended import JWTManager
+
+def register_jwt_error_handlers(app):
+    @app.errorhandler(jwt_exceptions.NoAuthorizationError)
+    def handle_no_auth_error(e):
+        logger.error(f"NoAuthorizationError: {str(e)}")
+        return jsonify({"msg": "Missing Authorization Header"}), 401
+
+    @app.errorhandler(jwt_exceptions.InvalidHeaderError)
+    def handle_invalid_header(e):
+        logger.error(f"InvalidHeaderError: {str(e)}")
+        return jsonify({"msg": "Invalid Authorization Header"}), 422
+
+    @app.errorhandler(jwt_exceptions.WrongTokenError)
+    def handle_wrong_token(e):
+        logger.error(f"WrongTokenError: {str(e)}")
+        return jsonify({"msg": "Wrong token type"}), 422
+
+    @app.errorhandler(jwt_exceptions.RevokedTokenError)
+    def handle_revoked_token(e):
+        logger.error(f"RevokedTokenError: {str(e)}")
+        return jsonify({"msg": "Token has been revoked"}), 401
+
+    @app.errorhandler(jwt_exceptions.FreshTokenRequired)
+    def handle_fresh_token_required(e):
+        logger.error(f"FreshTokenRequired: {str(e)}")
+        return jsonify({"msg": "Fresh token required"}), 401
+
+    @app.errorhandler(jwt_exceptions.UserLoadError)
+    def handle_user_load_error(e):
+        logger.error(f"UserLoadError: {str(e)}")
+        return jsonify({"msg": "User not found"}), 404
+
+    @app.errorhandler(jwt_exceptions.ExpiredSignatureError)
+    def handle_expired_token(e):
+        logger.error(f"ExpiredSignatureError: {str(e)}")
+        return jsonify({"msg": "Token has expired"}), 401
+
+    @app.errorhandler(jwt_exceptions.JWTDecodeError)
+    def handle_jwt_decode_error(e):
+        logger.error(f"JWTDecodeError: {str(e)}")
+        return jsonify({"msg": "Malformed token"}), 422
+
+    @app.errorhandler(jwt_exceptions.CSRFError)
+    def handle_csrf_error(e):
+        logger.error(f"CSRFError: {str(e)}")
+        return jsonify({"msg": "CSRF error"}), 401
+
 
 def admin_required(fn):
     @wraps(fn)
@@ -149,14 +200,21 @@ def refresh():
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 def get_current_user():
-    current_user_id = get_jwt_identity()
-    user = User.query.get(current_user_id)
-    
-    if not user:
-        return jsonify({"msg": "User not found"}), 404
-    
-    return jsonify({
-        "id": user.id,
-        "email": user.email,
-        "is_admin": user.is_admin
+    try:
+        current_user_id = get_jwt_identity()
+        logger.info(f"/me endpoint: JWT identity is {current_user_id}")
+        user = User.query.get(current_user_id)
+        if not user:
+            logger.warning("/me endpoint: User not found for id %s", current_user_id)
+            return jsonify({"msg": "User not found"}), 404
+        logger.info(f"/me endpoint: Returning user {user.email}")
+        return jsonify({
+            "id": user.id,
+            "email": user.email,
+            "is_admin": user.is_admin
+        }), 200
+    except Exception as e:
+        logger.error(f"/me endpoint error: {str(e)}", exc_info=True)
+        return jsonify({"msg": "Internal server error"}), 500
+
     }), 200

@@ -1,21 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import axios from 'axios';
-
-interface User {
-  email: string;
-  is_admin: boolean;
-}
-
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import axios, { AxiosError } from 'axios';
+import { AuthContext, type User } from './auth.context';
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -24,6 +10,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
   // Set up axios defaults
@@ -51,16 +38,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         // Set the auth header for the request
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        
         // Try to get the current user
         const response = await axios.get(`${API_BASE_URL}/api/me`);
         setUser(response.data);
+        setAuthError(null);
       } catch (error) {
+        const axiosError = error as AxiosError;
         console.error('Auth check failed', error);
         // Clear invalid tokens
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
         delete axios.defaults.headers.common['Authorization'];
+        setUser(null);
+        // Set a user-facing error message
+        if (axiosError.response && (axiosError.response.status === 401 || axiosError.response.status === 422)) {
+          setAuthError('Your session has expired or is invalid. Please log in again.');
+        } else {
+          setAuthError('Authentication failed. Please try again.');
+        }
       } finally {
         setLoading(false);
       }
@@ -110,15 +105,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+      {authError && (
+        <div style={{ color: 'red', background: '#fff3f3', padding: '1em', marginBottom: '1em', borderRadius: '4px', textAlign: 'center' }}>
+          {authError}
+        </div>
+      )}
       {!loading && children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+// useAuth hook has been moved to src/hooks/useAuth.ts
