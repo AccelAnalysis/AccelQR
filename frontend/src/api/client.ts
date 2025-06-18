@@ -1,4 +1,10 @@
 import axios from 'axios';
+import { jwtDecode } from 'jwt-decode';
+
+interface DecodedToken {
+  csrf?: string;
+  // Add other token claims if needed, e.g., exp, sub, etc.
+}
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5001',
@@ -14,6 +20,15 @@ apiClient.interceptors.request.use(
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      try {
+        const decodedToken = jwtDecode<DecodedToken>(token);
+        if (decodedToken.csrf) {
+          config.headers['X-CSRF-TOKEN'] = decodedToken.csrf;
+        }
+      } catch (e) {
+        console.error('Error decoding token:', e);
+        // Optionally handle token decoding errors, e.g., by clearing the token
+      }
     }
     return config;
   },
