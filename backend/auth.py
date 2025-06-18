@@ -64,8 +64,7 @@ def register_jwt_error_handlers(app):
         return jsonify({"msg": "Fresh token required"}), 401
 
     # Register expired token handler for Flask-JWT-Extended 4.x
-    from flask_jwt_extended import JWTManager
-    jwt_manager = JWTManager()
+    from extensions import jwt
     @jwt.expired_token_loader
     def my_expired_token_callback(jwt_header, jwt_payload):
         logger.error("Token has expired")
