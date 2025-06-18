@@ -221,7 +221,8 @@ def get_current_user():
             "id": user.id,
             "email": user.email,
             "is_admin": user.is_admin
-        except Exception as e:
+        }), 200
+    except Exception as e:
         logger.error(f"/me endpoint error: {str(e)}", exc_info=True)
         return jsonify({"msg": "Internal server error"}), 500
 
