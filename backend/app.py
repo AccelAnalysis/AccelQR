@@ -51,6 +51,10 @@ def create_app():
     # Create the app
     app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
 
+    # Add ProxyFix to preserve headers behind proxies
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
+
     # Debug: Print JWT secret key at startup
     print("[DEBUG] JWT_SECRET_KEY:", os.environ.get("JWT_SECRET_KEY"))
     logging.info(f"[DEBUG] JWT_SECRET_KEY: {os.environ.get('JWT_SECRET_KEY')}")
