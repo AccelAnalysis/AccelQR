@@ -19,7 +19,7 @@ import {
   Image,
   FormHelperText,
 } from '@chakra-ui/react';
-import axios from 'axios';
+import apiClient from '../api/client';
 import { ENDPOINTS, API_URL } from '../config';
 
 const getBaseUrl = () => {
@@ -52,7 +52,7 @@ const QRCodeGenerator = () => {
   const fetchFolders = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/folders`, {
+      const response = await apiClient.get(`${API_URL}/folders`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setFolders(response.data);
@@ -105,7 +105,7 @@ const QRCodeGenerator = () => {
     }
     
     try {
-      const response = await axios.post(ENDPOINTS.QR_CODES, {
+      const response = await apiClient.post(ENDPOINTS.QR_CODES, {
         ...formData,
         folder: formData.folder || null
       });

@@ -30,7 +30,7 @@ import {
 import { FiRefreshCw, FiDownload, FiCode, FiBarChart2, FiTrendingUp, FiMoreHorizontal } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Link as RouterLink } from 'react-router-dom';
-import axios from 'axios';
+import apiClient from '../api/client';
 import FolderSidebar from '../components/FolderSidebar';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -141,7 +141,7 @@ const Dashboard = () => {
       setLoading(true);
       const token = localStorage.getItem('token');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.get(ENDPOINTS.QR_CODES, { headers });
+      const response = await apiClient.get(ENDPOINTS.QR_CODES, { headers });
       setQRCodes(response.data);
       return response.data;
     } catch {
@@ -198,7 +198,7 @@ const Dashboard = () => {
 
       const token = localStorage.getItem('token');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.get(ENDPOINTS.STATS_DASHBOARD, { params, headers });
+      const response = await apiClient.get(ENDPOINTS.STATS_DASHBOARD, { params, headers });
       // Validate the data structure
       if (!response.data || !Array.isArray(response.data.scans)) {
         console.error('Invalid data structure received:', response.data);
@@ -243,7 +243,7 @@ const Dashboard = () => {
   // Export single QR code (new endpoint)
   const handleExportNew = useCallback(async (id: number) => {
     try {
-      const response = await axios.get(`${API_URL}/newstats/qrcode/${id}/quickstats`, { responseType: 'blob' });
+      const response = await apiClient.get(`${API_URL}/newstats/qrcode/${id}/quickstats`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -262,7 +262,7 @@ const Dashboard = () => {
   // Folder-level export (new endpoint)
   const handleExportFolderNew = useCallback(async (folder: string) => {
     try {
-      const response = await axios.get(`${API_URL}/newstats/export?folder=${encodeURIComponent(folder)}`, { responseType: 'blob' });
+      const response = await apiClient.get(`${API_URL}/newstats/export?folder=${encodeURIComponent(folder)}`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -283,7 +283,7 @@ const Dashboard = () => {
     e.preventDefault();
     if (!newFolderName.trim()) return;
     try {
-      await axios.post(`${API_URL}/newstats/folders`, { name: newFolderName });
+      await apiClient.post(`${API_URL}/newstats/folders`, { name: newFolderName });
       toast({ title: 'Folder created', description: `Folder "${newFolderName}" created.`, status: 'success', duration: 3000, isClosable: true });
       setNewFolderName('');
       refreshData();
