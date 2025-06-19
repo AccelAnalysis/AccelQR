@@ -87,20 +87,6 @@ def get_qrcode_flexible(identifier):
         # Ensure img is a true PIL Image before saving
         if hasattr(img, "get_image"):
             img = img.get_image()
-        # Ensure img is a true PIL Image before saving
-        if hasattr(img, "get_image"):
-            img = img.get_image()
-        # Ensure img is a true PIL Image before saving
-        if hasattr(img, "get_image"):
-            img = img.get_image()
-        # Ensure img is a true PIL Image before saving
-        if hasattr(img, "get_image"):
-            img = img.get_image()
-        # Ensure img is a true PIL Image before saving
-        if hasattr(img, "get_image"):
-            img = img.get_image()
-        if hasattr(img, "get_image"):
-            img = img.get_image()
         img.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode()
 
@@ -160,6 +146,9 @@ def get_qrcode_by_short_code(short_code):
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     buffered = BytesIO()
+    # Ensure img is a true PIL Image before saving
+    if hasattr(img, "get_image"):
+        img = img.get_image()
     img.save(buffered, format="PNG")
     img_str = base64.b64encode(buffered.getvalue()).decode()
     return jsonify({
