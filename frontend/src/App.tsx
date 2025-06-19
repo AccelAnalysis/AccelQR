@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './hooks/useAuth';
 import Dashboard from './pages/Dashboard';
 import QRCodeGenerator from './pages/QRCodeGenerator';
+import QRCodeImageByShortCode from './pages/QRCodeImageByShortCode';
 import QRCodeDetail from './pages/QRCodeDetail';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -51,7 +52,14 @@ function AppContent() {
               </ProtectedRoute>
             } 
           />
-          
+          <Route 
+            path="/qr-image-by-shortcode" 
+            element={
+              <ProtectedRoute>
+                <QRCodeImageByShortCode />
+              </ProtectedRoute>
+            } 
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Container>

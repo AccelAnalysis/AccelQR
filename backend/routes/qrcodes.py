@@ -174,6 +174,75 @@ def get_qrcode_by_short_code(short_code):
         "short_url": f"{request.host_url}r/{short_code}"
     })
 
+@bp.route('/scans-csv/<short_code>', methods=['GET'])
+def download_scans_csv_by_short_code(short_code):
+    import csv
+    from io import StringIO
+    from flask import Response
+    qrcode = QRCode.query.filter_by(short_code=short_code).first_or_404()
+    scans = qrcode.scans
+    output = StringIO()
+    writer = csv.writer(output)
+    # Write header
+    writer.writerow([
+        'id', 'timestamp', 'ip_address', 'user_agent', 'country', 'region', 'city',
+        'device_type', 'os_family', 'browser_family', 'referrer_domain', 'time_on_page', 'scrolled', 'scan_method'
+    ])
+    for scan in scans:
+        writer.writerow([
+            scan.id,
+            scan.timestamp.isoformat() if scan.timestamp else '',
+            scan.ip_address,
+            scan.user_agent,
+            scan.country,
+            scan.region,
+            scan.city,
+            scan.device_type,
+            scan.os_family,
+            scan.browser_family,
+            scan.referrer_domain,
+            scan.time_on_page,
+            scan.scrolled,
+            scan.scan_method,
+        ])
+    output.seek(0)
+    return Response(
+        output,
+        mimetype='text/csv',
+        headers={
+            'Content-Disposition': f'attachment; filename=scans_{short_code}.csv'
+        }
+    )
+
+@bp.route('/image-by-shortcode/<short_code>', methods=['GET'])
+def get_qr_image_by_short_code(short_code):
+    from io import BytesIO
+    import qrcode as qrcode_lib
+    from flask import send_file
+    qrcode = QRCode.query.filter_by(short_code=short_code).first_or_404()
+    qr = qrcode_lib.QRCode(
+        version=1,
+        error_correction=qrcode_lib.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(qrcode.target_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    # Robust PIL Image conversion
+    if hasattr(img, "get_image"):
+        img = img.get_image()
+    elif hasattr(img, "to_image"):
+        img = img.to_image()
+    elif not hasattr(img, "save"):
+        import logging
+        logging.error(f"QR make_image returned unexpected type: {type(img)}")
+        raise TypeError(f"QR make_image returned unexpected type: {type(img)}")
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    buffered.seek(0)
+    return send_file(buffered, mimetype='image/png')
+
 @bp.route('/<int:qrcode_id>', methods=['PUT'])
 @jwt_required()
 def update_qrcode(qrcode_id):

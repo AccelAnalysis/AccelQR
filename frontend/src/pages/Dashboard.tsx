@@ -30,6 +30,8 @@ import {
 import { FiRefreshCw, FiDownload, FiCode, FiBarChart2, FiTrendingUp, FiMoreHorizontal } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Link as RouterLink } from 'react-router-dom';
+// Added import for the new page
+
 import apiClient from '../api/client';
 import FolderSidebar from '../components/FolderSidebar';
 
@@ -594,3 +596,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
