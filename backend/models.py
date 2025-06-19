@@ -57,7 +57,7 @@ class User(db.Model):
         return check_password_hash(self.password_hash, password)
     
     def generate_auth_token(self):
-        return create_access_token(identity=self.id, expires_delta=timedelta(days=1))
+        return create_access_token(identity=str(self.id), expires_delta=timedelta(days=1))
     
     @staticmethod
     @classmethod

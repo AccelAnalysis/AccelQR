@@ -38,8 +38,8 @@ def login():
         return jsonify({"msg": "Invalid email or password"}), 401
     
     # Create tokens
-    access_token = create_access_token(identity=user.id)
-    refresh_token = create_refresh_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id))
+    refresh_token = create_refresh_token(identity=str(user.id))
     
     return jsonify({
         "access_token": access_token,
@@ -51,7 +51,7 @@ def login():
 @jwt_required(refresh=True)
 def refresh():
     current_user_id = get_jwt_identity()
-    new_token = create_access_token(identity=current_user_id)
+    new_token = create_access_token(identity=str(current_user_id))
     return jsonify({"access_token": new_token}), 200
 
 @bp.route('/me', methods=['GET'])
