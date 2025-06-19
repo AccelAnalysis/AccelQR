@@ -109,6 +109,9 @@ def create_app():
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
     app.permanent_session_lifetime = timedelta(days=1)
+    # Explicitly disable CSRF protection for Bearer tokens
+    app.config['JWT_COOKIE_CSRF_PROTECT'] = False
+    logging.info(f"[DEBUG] JWT_COOKIE_CSRF_PROTECT: {app.config.get('JWT_COOKIE_CSRF_PROTECT')}")
     
     # Initialize JWT
     jwt.init_app(app)
