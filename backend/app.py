@@ -186,6 +186,9 @@ def create_app():
         
         # Convert image to base64
         buffered = BytesIO()
+        # Ensure img is a true PIL Image before saving
+        if hasattr(img, "get_image"):
+            img = img.get_image()
         img.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
