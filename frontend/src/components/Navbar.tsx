@@ -28,6 +28,9 @@ const Navbar = () => {
                 <RouterLink to="/new">
                   <Button colorScheme="teal">Create QR Code</Button>
                 </RouterLink>
+                <RouterLink to="/qr-image-by-shortcode">
+                  <Button variant="outline" colorScheme="teal">QR Image by Short Code</Button>
+                </RouterLink>
                 <Menu>
                   <MenuButton
                     as={Button}
