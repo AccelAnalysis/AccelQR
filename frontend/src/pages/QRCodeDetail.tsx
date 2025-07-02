@@ -49,6 +49,7 @@ import { DeleteIcon } from '@chakra-ui/icons';
 import { FiArrowLeft, FiCopy, FiDownload, FiEdit2, FiExternalLink, FiTrash2, FiGlobe, FiSmartphone, FiClock, FiBarChart2 } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import axios from 'axios';
+import apiClient from '../api/client';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -235,7 +236,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
     if (!id) return;
     
     try {
-      const response = await axios.put(`${ENDPOINTS.QR_CODES}/${id}`, formData);
+      const response = await apiClient.put(`${ENDPOINTS.QR_CODES}/${id}`, formData);
       setQRCode(response.data);
       setIsEditing(false);
       toast({
@@ -262,7 +263,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
     
     try {
       setDeleting(true);
-      await axios.delete(ENDPOINTS.QR_CODES + `/${id}`);
+      await apiClient.delete(`${ENDPOINTS.QR_CODES}/${id}`);
       toast({
         title: 'Success',
         description: 'QR code deleted successfully',
