@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Clear invalid tokens
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
-        delete axios.defaults.headers.common['Authorization'];
+        delete apiClient.defaults.headers.common['Authorization'];
         setUser(null);
         // Set a user-facing error message
         if (axiosError.response && (axiosError.response.status === 401 || axiosError.response.status === 422)) {
