@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from models import db, QRCode, Scan
 from sqlalchemy import func
-from datetime import datetime, timedelta
+from datetime import datetime
 
 bp = Blueprint('qrcodes_stats', __name__, url_prefix='/api/qrcodes')
 
@@ -29,15 +29,12 @@ def qrcode_stats(qrcode_id):
 @jwt_required()
 def qrcode_enhanced_stats(qrcode_id):
     qrcode = QRCode.query.get_or_404(qrcode_id)
-    # Daily scans for past 30 days
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=30)
+    # Daily scans for all time
     daily_scans = db.session.query(
         func.date(Scan.timestamp).label('date'),
         func.count(Scan.id).label('count')
     ).filter(
-        Scan.qr_code_id == qrcode_id,
-        Scan.timestamp.between(start_date, end_date)
+        Scan.qr_code_id == qrcode_id
     ).group_by(
         func.date(Scan.timestamp)
     ).order_by(
@@ -115,10 +112,5 @@ def qrcode_enhanced_stats(qrcode_id):
         'scroll_rate': scroll_rate,
         'top_referrers': dict(top_referrers),
         'scans': scan_list,
-        'time_range': {
-            'start': start_date.isoformat(),
-            'end': end_date.isoformat(),
-            'group_by': 'day',
-            'date_format': 'YYYY-MM-DD'
-        }
+        
     })
