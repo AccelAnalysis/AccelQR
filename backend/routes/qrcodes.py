@@ -90,7 +90,6 @@ def get_qrcode_flexible(identifier):
         elif hasattr(img, "to_image"):
             img = img.to_image()
         elif not hasattr(img, "save"):
-            import logging
             logging.error(f"QR make_image returned unexpected type: {type(img)}")
             raise TypeError(f"QR make_image returned unexpected type: {type(img)}")
         img.save(buffered, format="PNG")
