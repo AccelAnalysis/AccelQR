@@ -48,7 +48,7 @@ import {
 import { DeleteIcon } from '@chakra-ui/icons';
 import { FiArrowLeft, FiCopy, FiDownload, FiEdit2, FiExternalLink, FiTrash2, FiGlobe, FiSmartphone, FiClock, FiBarChart2 } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import axios from 'axios';
+
 import apiClient from '../api/client';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -78,22 +78,24 @@ interface ScanData {
 
 interface Scan {
   id: string;
-  created_at: string;
+  timestamp: string;
   user_agent?: string;
   ip_address?: string;
   country?: string;
   region?: string;
   city?: string;
   device_type?: string;
-  os?: string;
-  browser?: string;
-  referrer?: string;
+  os_family?: string;
+  browser_family?: string;
+  referrer_domain?: string;
   time_on_page?: number;
-  scroll_depth?: number;
+  scrolled?: boolean;
+  scan_method?: string;
 }
 
 interface EnhancedStats {
   total_scans: number;
+  daily_scans: ScanData[];
   scans_by_country: Record<string, number>;
   scans_by_device: Record<string, number>;
   scans_by_os: Record<string, number>;
@@ -165,17 +167,29 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
     
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const [qrResponse, statsResponse, enhancedStatsResponse] = await Promise.all([
-        axios.get(`${API_URL}/qrcodes/flex/${id}`, { headers }),
-        axios.get(`${API_URL}/qrcodes/${id}/stats`, { headers }),
-        axios.get(`${API_URL}/qrcodes/${id}/enhanced-stats`, { headers })
+            const [qrResponse, enhancedStatsResponse] = await Promise.all([
+        apiClient.get(`${ENDPOINTS.QR_CODES}/flex/${id}`),
+        apiClient.get(`${ENDPOINTS.QR_CODES}/${id}/enhanced-stats`)
       ]);
       
-      setQRCode(qrResponse.data);
-      setScanData(statsResponse.data.daily_scans || []);
-      setEnhancedStats(enhancedStatsResponse.data);
+      const qrData = qrResponse.data;
+      const statsData = enhancedStatsResponse.data;
+      let dailyScans = statsData.daily_scans || [];
+      if (dailyScans.length === 0 && statsData.scans?.length) {
+        const map: Record<string, number> = {};
+        statsData.scans.forEach((scan: Scan) => {
+          const date = scan.timestamp?.split('T')[0];
+          if (date) {
+            map[date] = (map[date] || 0) + 1;
+          }
+        });
+        dailyScans = Object.entries(map)
+          .map(([date, count]) => ({ date, count }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      }
+      setQRCode(qrData);
+      setScanData(dailyScans);
+      setEnhancedStats(statsData);
       setFormData({
         name: qrResponse.data.name,
         target_url: qrResponse.data.target_url,
@@ -199,9 +213,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
 
   const fetchFolders = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.get(ENDPOINTS.FOLDERS, { headers });
+            const response = await apiClient.get(ENDPOINTS.FOLDERS);
       setFolders(response.data);
     } catch (error) {
       console.error('Error fetching folders:', error);
@@ -545,7 +557,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
             >
               <StatCard 
                 title="Total Scans" 
-                value={qrCode.scan_count} 
+                value={enhancedStats?.total_scans ?? 0} 
                 description="All time scans" 
               />
               <StatCard 
