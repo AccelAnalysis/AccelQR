@@ -133,7 +133,7 @@ def create_app():
     # Configure CORS for production: only allow frontend domain and /api/*
     CORS(app, resources={
         r"/api/*": {
-            "origins": ["https://accelqr-1.onrender.com"],
+            "origins": ["https://accelqr-1.onrender.com", "http://localhost:5173"],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "X-CSRF-TOKEN"],
             "supports_credentials": True

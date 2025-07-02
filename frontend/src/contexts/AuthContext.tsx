@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import axios, { AxiosError } from 'axios';
+import { AxiosError } from 'axios';
+import apiClient from '../api/client';
 import { AuthContext, type User } from './auth.context';
 
 interface AuthProviderProps {
@@ -16,13 +17,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Set up axios defaults
   useEffect(() => {
     const token = localStorage.getItem('token');
+    
+
+    
     if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
     
     // Clean up function
     return () => {
-      delete axios.defaults.headers.common['Authorization'];
+      delete apiClient.defaults.headers.common['Authorization'];
     };
   }, []);
 
@@ -37,9 +41,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       try {
         // Set the auth header for the request
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         // Try to get the current user
-        const response = await axios.get(`${API_BASE_URL}/me`);
+        const response = await apiClient.get(`/me`);
         setUser(response.data);
         setAuthError(null);
       } catch (error) {
@@ -66,7 +70,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
+      const response = await apiClient.post(`/login`, { email, password });
       const { access_token, refresh_token, user } = response.data;
       
       if (!access_token) {
@@ -78,7 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         localStorage.setItem('refreshToken', refresh_token);
       }
       
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+      apiClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       setUser(user);
     } catch (error) {
       console.error('Login failed:', error);
@@ -88,7 +92,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (email: string, password: string) => {
     try {
-      await axios.post(`${API_BASE_URL}/register`, { email, password });
+      await apiClient.post(`/register`, { email, password });
       await login(email, password);
     } catch (error) {
       console.error('Registration failed:', error);
@@ -99,7 +103,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
-    delete axios.defaults.headers.common['Authorization'];
+    delete apiClient.defaults.headers.common['Authorization'];
     setUser(null);
   };
 
