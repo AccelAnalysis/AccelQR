@@ -101,6 +101,7 @@ def qrcode_enhanced_stats(qrcode_id):
         'id': qrcode.id,
         'name': qrcode.name,
         'short_code': qrcode.short_code,
+        'total_scans': total_scans,
         'daily_scans': formatted_daily_scans,
         'scans_by_country': dict(scans_by_country),
         'scans_by_device': dict(scans_by_device),
