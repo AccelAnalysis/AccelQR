@@ -123,6 +123,8 @@ def get_qrcode_flexible(identifier):
             'id': qrcode.id,
             'name': qrcode.name,
             'short_code': qrcode.short_code,
+            'qr_code_image': f"data:image/png;base64,{img_str}",
+
             'target_url': qrcode.target_url,
             'created_at': qrcode.created_at.isoformat() if qrcode.created_at else None,
             'scans': scan_dicts,
