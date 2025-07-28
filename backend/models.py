@@ -59,7 +59,6 @@ class User(db.Model):
     def generate_auth_token(self):
         return create_access_token(identity=str(self.id), expires_delta=timedelta(days=1))
     
-    @staticmethod
     @classmethod
     def get_by_email(cls, email):
         return cls.query.filter_by(email=email).first()
