@@ -234,8 +234,12 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
     }
 
     try {
+      // Retrieve auth token for the request
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
       // Create the folder in the backend
-      await axios.post(`${API_URL}/folders`, { name: newFolderName });
+      await axios.post(`${API_URL}/folders`, { name: newFolderName }, { headers });
       
       // Refresh the folders list from the server
       await fetchFolders();
@@ -280,7 +284,9 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
     }
 
     try {
-      await axios.put(`${API_URL}/folders/${encodeURIComponent(oldName)}`, { name: newName });
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.put(`${API_URL}/folders/${encodeURIComponent(oldName)}`, { name: newName }, { headers });
       await fetchFolders();
       
       // If the renamed folder was active, update the active folder
@@ -312,7 +318,9 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
 
   const handleDeleteFolder = async (folderName: string): Promise<boolean> => {
     try {
-      await axios.delete(`${API_URL}/folders/${encodeURIComponent(folderName)}`);
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.delete(`${API_URL}/folders/${encodeURIComponent(folderName)}`, { headers });
       await fetchFolders();
       
       // If the deleted folder was active, reset to all folders view
