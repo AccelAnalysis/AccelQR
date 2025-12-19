@@ -14,11 +14,11 @@ interface DecodedToken {
   csrf?: string;   // CSRF token
   type?: string;   // Token type (e.g., 'access' or 'refresh')
   fresh?: boolean; // If the user logged in with credentials
-  [key: string]: any; // Allow other custom claims
+  [key: string]: unknown; // Allow other custom claims
 }
 
 // Helper function to log debug messages
-const debugLog = (...args: any[]) => {
+const debugLog = (...args: unknown[]) => {
   if (DEBUG) {
     console.log('[API Client]', ...args);
   }
@@ -124,7 +124,7 @@ apiClient.interceptors.response.use(
         // Try to refresh the token
         debugLog('[Auth] Refreshing access token...');
         const response = await axios.post(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/auth/refresh`, 
+          `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/refresh`, 
           {},
           {
             headers: {

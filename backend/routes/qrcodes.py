@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, QRCode, Scan
 from datetime import datetime, timedelta
 from sqlalchemy import func, and_
@@ -277,11 +277,13 @@ def create_qrcode():
     if not data or not data.get('target_url'):
         return jsonify({"msg": "Target URL is required"}), 400
     
+    current_user_id = get_jwt_identity()
     qrcode = QRCode(
         name=data.get('name', 'Untitled QR Code'),
         target_url=data['target_url'],
         short_code=str(uuid.uuid4())[:8],
-        folder=data.get('folder')
+        folder=data.get('folder'),
+        user_id=current_user_id
     )
     
     db.session.add(qrcode)

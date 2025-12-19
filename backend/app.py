@@ -174,11 +174,13 @@ def create_app():
         img = qr.make_image(fill_color="black", back_color="white")
         
         # Save QR code to database
+        current_user_id = get_jwt_identity()
         qr_code = QRCode(
             name=data.get('name', 'Untitled'),
             target_url=data['target_url'],
             short_code=short_code,
-            folder=data.get('folder')
+            folder=data.get('folder'),
+            user_id=current_user_id
         )
         
         db.session.add(qr_code)
