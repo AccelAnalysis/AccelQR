@@ -278,6 +278,8 @@ def create_qrcode():
         return jsonify({"msg": "Target URL is required"}), 400
     
     current_user_id = get_jwt_identity()
+    if current_user_id is not None:
+        current_user_id = int(current_user_id)
     qrcode = QRCode(
         name=data.get('name', 'Untitled QR Code'),
         target_url=data['target_url'],

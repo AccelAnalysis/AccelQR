@@ -24,8 +24,14 @@ const debugLog = (...args: unknown[]) => {
   }
 };
 
+const rawApiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const normalizedApiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '');
+const apiBaseUrl = normalizedApiBaseUrl.endsWith('/api')
+  ? normalizedApiBaseUrl
+  : `${normalizedApiBaseUrl}/api`;
+
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5001',
+  baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -123,8 +129,11 @@ apiClient.interceptors.response.use(
 
         // Try to refresh the token
         debugLog('[Auth] Refreshing access token...');
+
+        const refreshUrl = `${apiBaseUrl}/refresh`;
+
         const response = await axios.post(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/refresh`, 
+          refreshUrl,
           {},
           {
             headers: {

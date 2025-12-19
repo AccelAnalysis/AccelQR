@@ -175,6 +175,8 @@ def create_app():
         
         # Save QR code to database
         current_user_id = get_jwt_identity()
+        if current_user_id is not None:
+            current_user_id = int(current_user_id)
         qr_code = QRCode(
             name=data.get('name', 'Untitled'),
             target_url=data['target_url'],
