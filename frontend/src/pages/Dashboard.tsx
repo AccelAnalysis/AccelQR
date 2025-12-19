@@ -51,6 +51,7 @@ interface QRCode {
   target_url: string;
   created_at: string;
   scan_count: number;
+  last_scanned_at: string | null;
   folder: string | null;
 }
 
@@ -73,7 +74,7 @@ interface DashboardStats {
   time_range: TimeRange;
 }
 
-type SortableField = keyof Pick<QRCode, 'name' | 'short_code' | 'scan_count' | 'created_at' | 'folder'>;
+type SortableField = keyof Pick<QRCode, 'name' | 'short_code' | 'scan_count' | 'created_at' | 'last_scanned_at' | 'folder'>;
 
 // Stat card component
 const StatCard = ({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) => (
@@ -340,7 +341,7 @@ const Dashboard = () => {
       if (bValue === null || bValue === undefined) return sortConfig.direction === 'ascending' ? 1 : -1;
 
       // Convert dates to timestamps for comparison
-      if (sortConfig.key === 'created_at') {
+      if (sortConfig.key === 'created_at' || sortConfig.key === 'last_scanned_at') {
         aValue = new Date(aValue as string).getTime();
         bValue = new Date(bValue as string).getTime();
       }
@@ -404,6 +405,13 @@ const Dashboard = () => {
             </Th>
             <Th 
               cursor="pointer" 
+              onClick={() => requestSort('last_scanned_at')}
+              _hover={{ bg: 'gray.100' }}
+            >
+              Last Scanned {getSortIndicator('last_scanned_at')}
+            </Th>
+            <Th 
+              cursor="pointer" 
               onClick={() => requestSort('created_at')}
               _hover={{ bg: 'gray.100' }}
             >
@@ -433,6 +441,7 @@ const Dashboard = () => {
                 <code>{qr.short_code}</code>
               </Td>
               <Td isNumeric>{formatNumber(qr.scan_count)}</Td>
+              <Td>{qr.last_scanned_at ? formatDate(qr.last_scanned_at) : '-'}</Td>
               <Td>{formatDate(qr.created_at)}</Td>
               <Td>
                 {qr.folder ? (

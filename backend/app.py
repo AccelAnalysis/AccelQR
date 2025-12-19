@@ -15,7 +15,7 @@ import base64
 import uuid
 import geoip2.database
 from user_agents import parse
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, func
 from functools import wraps
 
 # Configure logging
@@ -241,8 +241,22 @@ def create_app():
     @app.route('/api/qrcodes', methods=['GET'])
     @jwt_required()
     def get_qrcodes():
-        qrcodes = QRCode.query.all()
-        
+        current_user_id = get_jwt_identity()
+        if current_user_id is not None:
+            current_user_id = int(current_user_id)
+
+        rows = (
+            db.session.query(
+                QRCode,
+                func.count(Scan.id).label('scan_count'),
+                func.max(Scan.timestamp).label('last_scanned_at'),
+            )
+            .outerjoin(Scan, Scan.qr_code_id == QRCode.id)
+            .filter(QRCode.user_id == current_user_id)
+            .group_by(QRCode.id)
+            .all()
+        )
+
         return jsonify([{
             'id': qr.id,
             'name': qr.name,
@@ -250,9 +264,10 @@ def create_app():
             'short_code': qr.short_code,
             'folder': qr.folder,
             'created_at': qr.created_at.isoformat(),
-            'scan_count': len(qr.scans),
+            'scan_count': int(scan_count or 0),
+            'last_scanned_at': last_scanned_at.isoformat() if last_scanned_at else None,
             'short_url': f"{request.host_url}r/{qr.short_code}"
-        } for qr in qrcodes])
+        } for qr, scan_count, last_scanned_at in rows])
     
     # Add QR code detail endpoint
     @app.route('/api/qrcodes/<int:qrcode_id>', methods=['GET'])
