@@ -9,11 +9,8 @@ bp = Blueprint('folders', __name__)
 @bp.route('', methods=['GET'])
 @jwt_required()
 def get_folders():
-    current_user_id = get_jwt_identity()
-    if current_user_id is not None:
-        current_user_id = int(current_user_id)
     # Query all unique folder names from QRCode table, excluding None or empty
-    folders = db.session.query(QRCode.folder).filter(QRCode.user_id == current_user_id).distinct().all()
+    folders = db.session.query(QRCode.folder).distinct().all()
     folder_list = sorted(set(f[0] for f in folders if f[0]))
     return jsonify(folder_list)
 

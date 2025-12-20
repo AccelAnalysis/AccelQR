@@ -23,7 +23,6 @@ def get_qrcodes():
             func.max(Scan.timestamp).label('last_scanned_at'),
         )
         .outerjoin(Scan, Scan.qr_code_id == QRCode.id)
-        .filter(QRCode.user_id == current_user_id)
         .group_by(QRCode.id)
         .all()
     )
