@@ -418,7 +418,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                   leftIcon={<FiDownload />}
                   onClick={() => {
                     const link = document.createElement('a');
-                    link.href = `${API_URL}/qrcodes/${qrCode.short_code}/image`;
+                    link.href = `${API_URL}/qrcodes/image-by-shortcode/${qrCode.short_code}`;
                     link.download = `qrcode-${qrCode.short_code}.png`;
                     link.click();
                   }}

@@ -2,7 +2,7 @@ import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
 // Debug mode - set to false in production
-const DEBUG = true;
+const DEBUG = import.meta.env.DEV;
 
 interface DecodedToken {
   // Standard JWT claims

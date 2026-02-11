@@ -48,6 +48,9 @@ def login_required(f):
 
 def create_app():
     """Create and configure the Flask application."""
+    # Load environment variables from .env file
+    load_dotenv()
+
     # Create the app
     app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
 
@@ -55,14 +58,14 @@ def create_app():
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
-    # Debug: Print JWT secret key at startup
-    print("[DEBUG] JWT_SECRET_KEY:", os.environ.get("JWT_SECRET_KEY"))
-    logging.info(f"[DEBUG] JWT_SECRET_KEY: {os.environ.get('JWT_SECRET_KEY')}")
-    
-    # Debug: Log Authorization header for every request
-    @app.before_request
-    def log_auth_header():
-        logging.info(f"Authorization header: {request.headers.get('Authorization')}")
+    is_production = os.getenv('FLASK_ENV', '').lower() == 'production'
+
+    if not is_production:
+        @app.before_request
+        def log_auth_header():
+            auth_header = request.headers.get('Authorization')
+            if auth_header:
+                logging.info("Authorization header present")
 
     # Configure database
     db_uri = os.getenv('DATABASE_URL')
@@ -70,7 +73,8 @@ def create_app():
         raise ValueError("No DATABASE_URL environment variable set. Please configure your database.")
     if db_uri.startswith('postgres://'):
         db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
-    print(f"[Startup] Using DATABASE_URL: {db_uri}")  # Added for debugging
+    if not is_production:
+        print("[Startup] DATABASE_URL configured")
 
     app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 
@@ -105,8 +109,12 @@ def create_app():
         )
     
     # Configure session and JWT
-    app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')
+    secret_key = os.getenv('SECRET_KEY')
+    jwt_secret_key = os.getenv('JWT_SECRET_KEY')
+    if is_production and (not secret_key or not jwt_secret_key):
+        raise ValueError("Missing SECRET_KEY and/or JWT_SECRET_KEY in production")
+    app.secret_key = secret_key or 'your-secret-key-here'
+    app.config['JWT_SECRET_KEY'] = jwt_secret_key or 'your-jwt-secret-key'
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
     app.permanent_session_lifetime = timedelta(days=1)
     # Explicitly disable CSRF protection for Bearer tokens
@@ -167,7 +175,7 @@ def create_app():
             box_size=10,
             border=4,
         )
-        qr.add_data(data['target_url'])
+        qr.add_data(f"{request.host_url}r/{short_code}")
         qr.make(fit=True)
         
         # Generate QR code image
@@ -241,10 +249,6 @@ def create_app():
     @app.route('/api/qrcodes', methods=['GET'])
     @jwt_required()
     def get_qrcodes():
-        current_user_id = get_jwt_identity()
-        if current_user_id is not None:
-            current_user_id = int(current_user_id)
-
         rows = (
             db.session.query(
                 QRCode,

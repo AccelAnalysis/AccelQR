@@ -14,6 +14,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 function AppContent() {
   const { user } = useAuth();
+  const allowRegistration = import.meta.env.DEV;
 
   useEffect(() => {
     document.title = 'AccelQR - Dynamic QR Code Tracker';
@@ -25,7 +26,14 @@ function AppContent() {
       <Container maxW="container.xl" py={8}>
         <Routes>
           <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
-          <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
+          <Route
+            path="/register"
+            element={
+              allowRegistration
+                ? (user ? <Navigate to="/" replace /> : <Register />)
+                : <Navigate to="/login" replace />
+            }
+          />
           
           {/* Protected Routes */}
           <Route 

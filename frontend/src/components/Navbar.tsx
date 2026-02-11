@@ -6,6 +6,7 @@ import { ChevronDownIcon } from '@chakra-ui/icons';
 const Navbar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const allowRegistration = import.meta.env.DEV;
 
   const handleLogout = () => {
     logout();
@@ -53,9 +54,11 @@ const Navbar = () => {
                 <RouterLink to="/login">
                   <Button variant="ghost">Login</Button>
                 </RouterLink>
-                <RouterLink to="/register">
-                  <Button colorScheme="teal">Sign Up</Button>
-                </RouterLink>
+                {allowRegistration && (
+                  <RouterLink to="/register">
+                    <Button colorScheme="teal">Sign Up</Button>
+                  </RouterLink>
+                )}
               </>
             )}
           </HStack>

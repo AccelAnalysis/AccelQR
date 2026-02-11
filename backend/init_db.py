@@ -18,7 +18,12 @@ def init_db():
             
             # Get admin credentials from environment variables
             admin_email = os.getenv('ADMIN_EMAIL', 'admin@example.com')
-            admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
+            is_production = os.getenv('FLASK_ENV', '').lower() == 'production'
+            admin_password = os.getenv('ADMIN_PASSWORD')
+            if not admin_password:
+                if is_production:
+                    raise RuntimeError("ADMIN_PASSWORD must be set in production")
+                admin_password = 'admin123'
             
             # Check if admin user exists
             admin = User.query.filter_by(email=admin_email).first()

@@ -9,21 +9,11 @@ from datetime import timedelta, datetime
 import logging
 from pathlib import Path
 
-# Configure logging
-log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
-os.makedirs(log_dir, exist_ok=True)
-log_file = os.path.join(log_dir, f'auth_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler()
-    ]
-)
-
 logger = logging.getLogger(__name__)
+
+
+def _is_production_env() -> bool:
+    return os.getenv('FLASK_ENV', '').lower() == 'production'
 
 # Create auth blueprint
 auth_bp = Blueprint('auth', __name__)
@@ -42,7 +32,6 @@ def register_jwt_error_handlers(app):
         import traceback
         from flask import request
         logger.error(f"InvalidHeaderError: {str(e)}\n{traceback.format_exc()}")
-        logger.error(f"Request headers: {dict(request.headers)}")
         return jsonify({"msg": "Invalid Authorization Header"}), 422
 
     @app.errorhandler(jwt_exceptions.WrongTokenError)
@@ -50,7 +39,6 @@ def register_jwt_error_handlers(app):
         import traceback
         from flask import request
         logger.error(f"WrongTokenError: {str(e)}\n{traceback.format_exc()}")
-        logger.error(f"Request headers: {dict(request.headers)}")
         return jsonify({"msg": "Wrong token type"}), 422
 
     @app.errorhandler(jwt_exceptions.RevokedTokenError)
@@ -75,7 +63,6 @@ def register_jwt_error_handlers(app):
         import traceback
         from flask import request
         logger.error(f"JWTDecodeError: {str(e)}\n{traceback.format_exc()}")
-        logger.error(f"Request headers: {dict(request.headers)}")
         return jsonify({"msg": "Malformed token"}), 422
 
     @app.errorhandler(jwt_exceptions.CSRFError)
@@ -96,6 +83,8 @@ def admin_required(fn):
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
+    if _is_production_env():
+        return jsonify({"msg": "Not found"}), 404
     data = request.get_json()
     
     # Validate input
@@ -125,66 +114,18 @@ def login():
         
         if not data or not data.get('email') or not data.get('password'):
             return jsonify({"msg": "Email and password are required"}), 400
-        
-        # Get the database URI from the app config
-        db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI')
-        
-        print(f"Database URI from config: {db_uri}")
-        
-        # Verify database configuration
-        if not db_uri:
-            print("Error: Database configuration not properly set in app config")
-            return jsonify({"msg": "Server configuration error"}), 500
-        
-        # Debug: List all users in the database
-        try:
-            print("\nDebug: Listing all users in the database:")
-            all_users = User.query.all()
-            for u in all_users:
-                print(f"- {u.id}: {u.email} (admin: {u.is_admin})")
-        except Exception as e:
-            print(f"Error listing users: {e}")
-        
-        # Get user from database
-        print(f"\nAttempting to find user with email: {data['email']}")
-        
-        # Debug: Print all users in the database
-        all_users = User.query.all()
-        print("All users in database:")
-        for u in all_users:
-            print(f"- {u.id}: {u.email} (admin: {u.is_admin})")
-        
+
         user = User.query.filter_by(email=data['email']).first()
         
         if not user:
-            print(f"No user found with email: {data['email']}")
             return jsonify({"msg": "Invalid email or password"}), 401
-            
-        print(f"User found: {user.email}, checking password...")
-        
-        # Verify password
-        print(f"\n=== DEBUG: Password Check ===")
-        print(f"Stored password hash: {user.password_hash}")
-        print(f"Checking password for user: {user.email}")
-        print(f"Password being checked: {data['password']}")
-        print(f"User's check_password method: {user.check_password}")
-        
-        # Verify password using the model's check_password method
-        print(f"\n=== Password Check ===")
-        print(f"Stored password hash: {user.password_hash}")
-        
-        # Check if password is correct
+
         if not user.check_password(data['password']):
-            print("Password validation failed")
             return jsonify({"msg": "Invalid email or password"}), 401
-            
-        print("\n=== Authentication Succeeded ===")
-            
-        logger.info(f"Creating tokens for user {user.id}")
+
         access_token = create_access_token(identity=str(user.id))
         refresh_token = create_refresh_token(identity=str(user.id))
-        
-        logger.info(f"Login successful for user {user.id}")
+
         return jsonify({
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -192,7 +133,7 @@ def login():
         }), 200
             
     except Exception as e:
-        logger.error(f"Error during login: {str(e)}", exc_info=True)
+        logger.error("Error during login", exc_info=True)
         return jsonify({"msg": "An error occurred during login"}), 500
 
 @auth_bp.route('/refresh', methods=['POST'])

@@ -12,10 +12,6 @@ bp = Blueprint('qrcodes', __name__, url_prefix='/api/qrcodes')
 @bp.route('', methods=['GET'])
 @jwt_required()
 def get_qrcodes():
-    current_user_id = get_jwt_identity()
-    if current_user_id is not None:
-        current_user_id = int(current_user_id)
-
     rows = (
         db.session.query(
             QRCode,
@@ -48,6 +44,7 @@ def get_qrcode(qrcode_id):
         'name': qrcode.name,
         'short_code': qrcode.short_code,
         'target_url': qrcode.target_url,
+        'description': qrcode.description,
         'created_at': qrcode.created_at.isoformat(),
         'scans': [{
             'id': scan.id,
@@ -94,7 +91,7 @@ def get_qrcode_flexible(identifier):
             box_size=10,
             border=4,
         )
-        qr.add_data(qrcode.target_url)
+        qr.add_data(f"{request.host_url}r/{qrcode.short_code}")
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
         buffered = BytesIO()
@@ -140,6 +137,8 @@ def get_qrcode_flexible(identifier):
             'qr_code_image': f"data:image/png;base64,{img_str}",
 
             'target_url': qrcode.target_url,
+            'description': qrcode.description,
+            'folder': qrcode.folder,
             'created_at': qrcode.created_at.isoformat() if qrcode.created_at else None,
             'scans': scan_dicts,
             'short_url': f"{request.host_url}r/{qrcode.short_code}"
@@ -163,7 +162,7 @@ def get_qrcode_by_short_code(short_code):
         box_size=10,
         border=4,
     )
-    qr.add_data(qrcode.target_url)
+    qr.add_data(f"{request.host_url}r/{qrcode.short_code}")
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     buffered = BytesIO()
@@ -241,7 +240,7 @@ def get_qr_image_by_short_code(short_code):
         box_size=10,
         border=4,
     )
-    qr.add_data(qrcode.target_url)
+    qr.add_data(f"{request.host_url}r/{qrcode.short_code}")
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     # Robust PIL Image conversion
@@ -261,17 +260,42 @@ def get_qr_image_by_short_code(short_code):
 @bp.route('/<int:qrcode_id>', methods=['PUT'])
 @jwt_required()
 def update_qrcode(qrcode_id):
-    data = request.get_json()
+    data = request.get_json() or {}
     qrcode = QRCode.query.get_or_404(qrcode_id)
     
     if 'name' in data:
         qrcode.name = data['name']
     if 'target_url' in data:
         qrcode.target_url = data['target_url']
+    if 'description' in data:
+        qrcode.description = data['description']
     if 'folder' in data:
         qrcode.folder = data['folder']
     
     db.session.commit()
+
+    from io import BytesIO
+    import qrcode as qrcode_lib
+    import base64
+    qr = qrcode_lib.QRCode(
+        version=1,
+        error_correction=qrcode_lib.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(f"{request.host_url}r/{qrcode.short_code}")
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffered = BytesIO()
+    if hasattr(img, "get_image"):
+        img = img.get_image()
+    elif hasattr(img, "to_image"):
+        img = img.to_image()
+    elif not hasattr(img, "save"):
+        logging.error(f"QR make_image returned unexpected type: {type(img)}")
+        raise TypeError(f"QR make_image returned unexpected type: {type(img)}")
+    img.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
     
     return jsonify({
         'id': qrcode.id,
@@ -279,9 +303,12 @@ def update_qrcode(qrcode_id):
         'target_url': qrcode.target_url,
         'short_code': qrcode.short_code,
         'folder': qrcode.folder,
+        'description': qrcode.description,
         'created_at': qrcode.created_at.isoformat(),
-        'scan_count': len(qrcode.scans)
-    }), 201
+        'scan_count': len(qrcode.scans),
+        'qr_code_image': f"data:image/png;base64,{img_str}",
+        'short_url': f"{request.host_url}r/{qrcode.short_code}"
+    }), 200
 
 @bp.route('', methods=['POST'])
 @jwt_required()
@@ -299,6 +326,7 @@ def create_qrcode():
         target_url=data['target_url'],
         short_code=str(uuid.uuid4())[:8],
         folder=data.get('folder'),
+        description=data.get('description'),
         user_id=current_user_id
     )
     
@@ -311,5 +339,6 @@ def create_qrcode():
         'short_code': qrcode.short_code,
         'target_url': qrcode.target_url,
         'created_at': qrcode.created_at.isoformat(),
-        'folder': qrcode.folder
+        'folder': qrcode.folder,
+        'description': qrcode.description
     }), 201

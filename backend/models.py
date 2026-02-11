@@ -13,6 +13,7 @@ class QRCode(db.Model):
     target_url = db.Column(db.String(500), nullable=False)
     short_code = db.Column(db.String(10), unique=True, nullable=False)
     folder = db.Column(db.String(100))
+    description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
