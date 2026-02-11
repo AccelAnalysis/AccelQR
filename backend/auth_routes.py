@@ -13,7 +13,8 @@ import os
 bp = Blueprint('auth', __name__)
 
 def _is_production_env() -> bool:
-    return os.getenv('FLASK_ENV', '').lower() == 'production'
+    flask_env = os.getenv('FLASK_ENV', '').lower()
+    return flask_env == 'production' or (not flask_env and os.getenv('RENDER') is not None)
 
 @bp.route('/register', methods=['POST'])
 def register():

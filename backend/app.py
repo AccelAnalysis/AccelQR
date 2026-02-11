@@ -58,7 +58,8 @@ def create_app():
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
-    is_production = os.getenv('FLASK_ENV', '').lower() == 'production'
+    flask_env = os.getenv('FLASK_ENV', '').lower()
+    is_production = flask_env == 'production' or (not flask_env and os.getenv('RENDER') is not None)
 
     if not is_production:
         @app.before_request

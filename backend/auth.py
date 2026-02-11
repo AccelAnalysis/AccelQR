@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 def _is_production_env() -> bool:
-    return os.getenv('FLASK_ENV', '').lower() == 'production'
+    flask_env = os.getenv('FLASK_ENV', '').lower()
+    return flask_env == 'production' or (not flask_env and os.getenv('RENDER') is not None)
 
 # Create auth blueprint
 auth_bp = Blueprint('auth', __name__)
