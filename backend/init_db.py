@@ -14,21 +14,19 @@ def init_db():
             migrations_dir = os.path.join(os.path.dirname(__file__), 'migrations')
 
             print("Initializing database...")
-            
-            # Create all tables
-            print("Creating database tables...")
-            ext_db.create_all()
-            print("✓ Database tables created")
 
-            # Apply migrations (needed for schema updates like new columns)
             inspector = inspect(db.engine)
             tables = inspector.get_table_names()
             if 'alembic_version' in tables:
+                # When Alembic is in use, rely on migrations to evolve schema.
                 print("Applying database migrations...")
                 upgrade(directory=migrations_dir)
                 print("✓ Database migrations applied successfully!")
             else:
-                # Database was created without Alembic tracking; mark it as up-to-date
+                # Legacy bootstrap: create schema from models, then mark migrations as applied.
+                print("Creating database tables...")
+                ext_db.create_all()
+                print("✓ Database tables created")
                 stamp(directory=migrations_dir, revision='head')
 
             # Get admin credentials from environment variables
