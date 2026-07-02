@@ -14,6 +14,7 @@ from io import BytesIO
 import base64
 import uuid
 import geoip2.database
+import geoip2.errors
 from user_agents import parse
 from sqlalchemy import text, inspect, func
 from functools import wraps
@@ -34,6 +35,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+GEOLITE_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'GeoLite2-City.mmdb')
+
 # Database and JWT are now initialized in extensions.py
 from flask_migrate import Migrate
 
@@ -45,6 +48,25 @@ def login_required(f):
             return jsonify({"error": "Authentication required"}), 401
         return f(*args, **kwargs)
     return decorated_function
+
+def lookup_scan_location(ip_address):
+    if not ip_address or not os.path.exists(GEOLITE_DB_PATH):
+        return {}
+
+    try:
+        with geoip2.database.Reader(GEOLITE_DB_PATH) as reader:
+            response = reader.city(ip_address)
+            return {
+                'country': response.country.name,
+                'region': response.subdivisions.most_specific.name,
+                'city': response.city.name,
+                'timezone': response.location.time_zone
+            }
+    except (ValueError, geoip2.errors.AddressNotFoundError):
+        return {}
+    except Exception:
+        logger.exception("Failed to look up GeoIP location for scan")
+        return {}
 
 def create_app():
     """Create and configure the Flask application."""
@@ -230,11 +252,16 @@ def create_app():
         # Log the scan
         if request.remote_addr != '127.0.0.1':  # Don't log localhost scans
             user_agent = parse(request.user_agent.string)
+            location = lookup_scan_location(request.remote_addr)
             
             scan = Scan(
                 qr_code_id=qr_code.id,
                 ip_address=request.remote_addr,
                 user_agent=request.user_agent.string,
+                country=location.get('country'),
+                region=location.get('region'),
+                city=location.get('city'),
+                timezone=location.get('timezone'),
                 device_type=user_agent.device.family,
                 os_family=user_agent.os.family,
                 browser_family=user_agent.browser.family,
