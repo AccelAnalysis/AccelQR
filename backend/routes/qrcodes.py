@@ -31,7 +31,8 @@ def get_qrcodes():
         'created_at': qr.created_at.isoformat(),
         'scan_count': int(scan_count or 0),
         'last_scanned_at': last_scanned_at.isoformat() if last_scanned_at else None,
-        'folder': qr.folder
+        'folder': qr.folder,
+        'short_url': f"{request.host_url}r/{qr.short_code}"
     } for qr, scan_count, last_scanned_at in rows])
 
 @bp.route('/<int:qrcode_id>', methods=['GET'])
@@ -340,5 +341,6 @@ def create_qrcode():
         'target_url': qrcode.target_url,
         'created_at': qrcode.created_at.isoformat(),
         'folder': qrcode.folder,
-        'description': qrcode.description
+        'description': qrcode.description,
+        'short_url': f"{request.host_url}r/{qrcode.short_code}"
     }), 201

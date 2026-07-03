@@ -1,7 +1,7 @@
 import { Box, Flex, Button, Heading, Container, Menu, MenuButton, MenuList, MenuItem, Avatar, Text, HStack } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { ChevronDownIcon } from '@chakra-ui/icons';
+import { ChevronDownIcon, HamburgerIcon } from '@chakra-ui/icons';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -20,7 +20,7 @@ const Navbar = () => {
             <Heading size="lg" color="teal.500">AccelQR</Heading>
           </RouterLink>
           <Box flex={1} />
-          <HStack spacing={4}>
+          <HStack spacing={3} display={{ base: 'none', md: 'flex' }}>
             {user ? (
               <>
                 <RouterLink to="/">
@@ -29,9 +29,16 @@ const Navbar = () => {
                 <RouterLink to="/new">
                   <Button colorScheme="teal">Create QR Code</Button>
                 </RouterLink>
-                <RouterLink to="/qr-image-by-shortcode">
-                  <Button variant="outline" colorScheme="teal">QR Image by Short Code</Button>
-                </RouterLink>
+                <Menu>
+                  <MenuButton as={Button} variant="ghost" rightIcon={<ChevronDownIcon />}>
+                    Tools
+                  </MenuButton>
+                  <MenuList>
+                    <MenuItem as={RouterLink} to="/qr-image-by-shortcode">
+                      QR Image Lookup
+                    </MenuItem>
+                  </MenuList>
+                </Menu>
                 <Menu>
                   <MenuButton
                     as={Button}
@@ -62,6 +69,35 @@ const Navbar = () => {
               </>
             )}
           </HStack>
+          <Box display={{ base: 'block', md: 'none' }}>
+            <Menu>
+              <MenuButton
+                as={Button}
+                variant="ghost"
+                aria-label="Open navigation menu"
+                leftIcon={<HamburgerIcon />}
+              >
+                Menu
+              </MenuButton>
+              <MenuList>
+                {user ? (
+                  <>
+                    <MenuItem as={RouterLink} to="/">Dashboard</MenuItem>
+                    <MenuItem as={RouterLink} to="/new">Create QR Code</MenuItem>
+                    <MenuItem as={RouterLink} to="/qr-image-by-shortcode">QR Image Lookup</MenuItem>
+                    <MenuItem onClick={handleLogout}>Logout</MenuItem>
+                  </>
+                ) : (
+                  <>
+                    <MenuItem as={RouterLink} to="/login">Login</MenuItem>
+                    {allowRegistration && (
+                      <MenuItem as={RouterLink} to="/register">Sign Up</MenuItem>
+                    )}
+                  </>
+                )}
+              </MenuList>
+            </Menu>
+          </Box>
         </Flex>
       </Container>
     </Box>

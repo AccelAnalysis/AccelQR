@@ -47,7 +47,7 @@ const NewStatsView: React.FC = () => {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (error) {
+    } catch {
       toast({ title: 'Export failed', description: 'Could not export stats.', status: 'error' });
     }
   };
