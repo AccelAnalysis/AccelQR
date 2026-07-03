@@ -40,7 +40,10 @@ def qrcode_enhanced_stats(qrcode_id):
     ).order_by(
         func.date(Scan.timestamp)
     ).all()
-    formatted_daily_scans = [{'date': date.isoformat(), 'count': count} for date, count in daily_scans]
+    formatted_daily_scans = [
+        {'date': date.isoformat() if hasattr(date, 'isoformat') else str(date), 'count': count}
+        for date, count in daily_scans
+    ]
 
     # All-time scan list and aggregated stats
     scans = Scan.query.filter_by(qr_code_id=qrcode_id).all()
@@ -64,8 +67,17 @@ def qrcode_enhanced_stats(qrcode_id):
             'ip_address': scan.ip_address,
             'user_agent': scan.user_agent,
             'country': scan.country,
+            'country_iso_code': getattr(scan, 'country_iso_code', None),
             'region': scan.region,
+            'region_iso_code': getattr(scan, 'region_iso_code', None),
+            'subdivision_iso_code': getattr(scan, 'subdivision_iso_code', None),
             'city': scan.city,
+            'postal_code': getattr(scan, 'postal_code', None),
+            'latitude': getattr(scan, 'latitude', None),
+            'longitude': getattr(scan, 'longitude', None),
+            'accuracy_radius': getattr(scan, 'accuracy_radius', None),
+            'accuracy_radius_km': getattr(scan, 'accuracy_radius_km', None),
+            'timezone': scan.timezone,
             'device_type': scan.device_type,
             'os_family': scan.os_family,
             'browser_family': scan.browser_family,

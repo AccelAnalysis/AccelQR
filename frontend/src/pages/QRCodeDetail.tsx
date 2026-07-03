@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Box, 
+  Alert,
+  AlertIcon,
+  Badge,
   Button, 
   Card, 
   CardBody, 
@@ -23,6 +26,7 @@ import {
   Select, 
   SimpleGrid, 
   Spinner, 
+  Stack,
   Stat,
   StatHelpText,
   StatLabel,
@@ -82,8 +86,17 @@ interface Scan {
   user_agent?: string;
   ip_address?: string;
   country?: string;
+  country_iso_code?: string;
   region?: string;
+  region_iso_code?: string;
+  subdivision_iso_code?: string;
   city?: string;
+  postal_code?: string;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  accuracy_radius?: number | string | null;
+  accuracy_radius_km?: number | string | null;
+  timezone?: string;
   device_type?: string;
   os_family?: string;
   browser_family?: string;
@@ -109,6 +122,160 @@ interface EnhancedStats {
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+
+type DateRangeKey = '24h' | '7d' | '30d' | '90d' | 'all' | 'custom';
+
+interface LocationGroup {
+  key: string;
+  country: string;
+  countryIso?: string;
+  region: string;
+  regionIso?: string;
+  city: string;
+  postalCode: string;
+  timezone: string;
+  latitude?: string;
+  longitude?: string;
+  accuracyRadius?: string;
+  count: number;
+  lastScannedAt?: string;
+}
+
+const DATE_RANGE_OPTIONS: Array<{ value: DateRangeKey; label: string }> = [
+  { value: '24h', label: 'Last 24 hours' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: '90d', label: 'Last 90 days' },
+  { value: 'all', label: 'All time' },
+  { value: 'custom', label: 'Custom' },
+];
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const getAppBaseUrl = (): string => API_URL.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+
+const getShortUrl = (shortCode: string): string => `${getAppBaseUrl()}/r/${shortCode}`;
+
+const parseScanDate = (scan: Scan): Date | null => {
+  if (!scan.timestamp) return null;
+  const date = new Date(scan.timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatDateTime = (dateString?: string | null): string => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const formatLocalDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatCoordinate = (value?: number | string | null): string | undefined => {
+  if (value === null || value === undefined || value === '') return undefined;
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) return String(value);
+  return numericValue.toFixed(4);
+};
+
+const formatAccuracyRadius = (scan: Scan): string | undefined => {
+  const value = scan.accuracy_radius_km ?? scan.accuracy_radius;
+  if (value === null || value === undefined || value === '') return undefined;
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) return String(value);
+  return `Approx. within ${numericValue} km`;
+};
+
+const maskIpAddress = (ipAddress?: string): string => {
+  if (!ipAddress) return 'N/A';
+  if (ipAddress.includes(':')) {
+    return `${ipAddress.split(':').slice(0, 3).join(':')}:...`;
+  }
+  const parts = ipAddress.split('.');
+  if (parts.length === 4) return `${parts[0]}.${parts[1]}.${parts[2]}.x`;
+  return ipAddress;
+};
+
+const getRangeStart = (range: DateRangeKey, customStart: string): Date | null => {
+  const now = new Date();
+  if (range === '24h') return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  if (range === '7d') return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  if (range === '30d') return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  if (range === '90d') return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  if (range === 'custom' && customStart) return new Date(`${customStart}T00:00:00`);
+  return null;
+};
+
+const getRangeEnd = (range: DateRangeKey, customEnd: string): Date | null => {
+  if (range === 'custom' && customEnd) return new Date(`${customEnd}T23:59:59.999`);
+  return null;
+};
+
+const increment = (target: Record<string, number>, key?: string | number | null, fallback = 'Unknown') => {
+  const normalizedKey = key === null || key === undefined || key === '' ? fallback : String(key);
+  target[normalizedKey] = (target[normalizedKey] || 0) + 1;
+};
+
+const getTopEntry = (entries: Record<string, number>): [string, number] | null => {
+  const sorted = Object.entries(entries).sort((a, b) => b[1] - a[1]);
+  return sorted[0] || null;
+};
+
+const getLocationGroups = (scans: Scan[]): LocationGroup[] => {
+  const groups = new Map<string, LocationGroup>();
+
+  scans.forEach((scan) => {
+    const country = scan.country || 'Unknown';
+    const region = scan.region || 'Unknown';
+    const city = scan.city || 'Unknown';
+    const postalCode = scan.postal_code || 'Unknown';
+    const timezone = scan.timezone || 'Unknown';
+    const key = [country, scan.country_iso_code || '', region, scan.region_iso_code || scan.subdivision_iso_code || '', city, postalCode].join('|');
+    const existing = groups.get(key);
+    const scanDate = parseScanDate(scan);
+
+    if (existing) {
+      existing.count += 1;
+      if (scanDate && (!existing.lastScannedAt || scanDate > new Date(existing.lastScannedAt))) {
+        existing.lastScannedAt = scan.timestamp;
+      }
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      country,
+      countryIso: scan.country_iso_code,
+      region,
+      regionIso: scan.region_iso_code || scan.subdivision_iso_code,
+      city,
+      postalCode,
+      timezone,
+      latitude: formatCoordinate(scan.latitude),
+      longitude: formatCoordinate(scan.longitude),
+      accuracyRadius: formatAccuracyRadius(scan),
+      count: 1,
+      lastScannedAt: scan.timestamp,
+    });
+  });
+
+  return Array.from(groups.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return (new Date(b.lastScannedAt || 0).getTime()) - (new Date(a.lastScannedAt || 0).getTime());
+  });
+};
 
 interface StatCardProps {
   title: string;
@@ -137,7 +304,6 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
   const [qrCode, setQRCode] = useState<QRCode | null>(null);
-  const [scanData, setScanData] = useState<ScanData[]>([]);
   const [enhancedStats, setEnhancedStats] = useState<EnhancedStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -152,6 +318,10 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
   });
   // Tab state
   const [tabIndex, setTabIndex] = useState(0);
+  const [dateRange, setDateRange] = useState<DateRangeKey>('30d');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [scanLogSearch, setScanLogSearch] = useState('');
   const navigate = useNavigate();
   
   const formatDate = (dateString: string): string => {
@@ -174,21 +344,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
       
       const qrData = qrResponse.data;
       const statsData = enhancedStatsResponse.data;
-      let dailyScans = statsData.daily_scans || [];
-      if (dailyScans.length === 0 && statsData.scans?.length) {
-        const map: Record<string, number> = {};
-        statsData.scans.forEach((scan: Scan) => {
-          const date = scan.timestamp?.split('T')[0];
-          if (date) {
-            map[date] = (map[date] || 0) + 1;
-          }
-        });
-        dailyScans = Object.entries(map)
-          .map(([date, count]) => ({ date, count }))
-          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      }
       setQRCode(qrData);
-      setScanData(dailyScans);
       setEnhancedStats(statsData);
       setFormData({
         name: qrResponse.data.name,
@@ -235,6 +391,137 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
       fetchFolders();
     }
   }, [id, fetchQRCode, fetchFolders]);
+
+  const filteredScans = useMemo(() => {
+    const scans = enhancedStats?.scans || [];
+    const start = getRangeStart(dateRange, customStartDate);
+    const end = getRangeEnd(dateRange, customEndDate);
+
+    return scans
+      .filter((scan) => {
+        const scanDate = parseScanDate(scan);
+        if (!scanDate) return false;
+        if (start && scanDate < start) return false;
+        if (end && scanDate > end) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const aTime = parseScanDate(a)?.getTime() || 0;
+        const bTime = parseScanDate(b)?.getTime() || 0;
+        return bTime - aTime;
+      });
+  }, [enhancedStats?.scans, dateRange, customStartDate, customEndDate]);
+
+  const selectedStats = useMemo(() => {
+    const dailyMap: Record<string, number> = {};
+    const scansByCountry: Record<string, number> = {};
+    const scansByDevice: Record<string, number> = {};
+    const scansByOs: Record<string, number> = {};
+    const scansByBrowser: Record<string, number> = {};
+    const scansByHour: Record<string, number> = {};
+    const scansByWeekday: Record<string, number> = {};
+    const topReferrers: Record<string, number> = {};
+    let totalTime = 0;
+    let timeCount = 0;
+    let scrollCount = 0;
+    let directScanCount = 0;
+    let referredScanCount = 0;
+
+    filteredScans.forEach((scan) => {
+      const scanDate = parseScanDate(scan);
+      if (scanDate) {
+        const dateKey = formatLocalDateKey(scanDate);
+        increment(dailyMap, dateKey);
+        increment(scansByHour, scanDate.getHours());
+        increment(scansByWeekday, scanDate.getDay());
+      }
+
+      increment(scansByCountry, scan.country);
+      increment(scansByDevice, scan.device_type);
+      increment(scansByOs, scan.os_family);
+      increment(scansByBrowser, scan.browser_family);
+      increment(topReferrers, scan.referrer_domain, 'Direct / QR scan');
+
+      if (scan.referrer_domain) {
+        referredScanCount += 1;
+      } else {
+        directScanCount += 1;
+      }
+
+      if (scan.time_on_page !== undefined && scan.time_on_page !== null) {
+        totalTime += scan.time_on_page;
+        timeCount += 1;
+      }
+      if (scan.scrolled) scrollCount += 1;
+    });
+
+    const totalScans = filteredScans.length;
+    const locationGroups = getLocationGroups(filteredScans);
+    const firstScan = filteredScans[filteredScans.length - 1];
+    const lastScan = filteredScans[0];
+    const bestHour = getTopEntry(scansByHour);
+    const bestWeekday = getTopEntry(scansByWeekday);
+    const topDevice = getTopEntry(scansByDevice);
+
+    return {
+      totalScans,
+      dailyScans: Object.entries(dailyMap)
+        .map(([date, count]) => ({ date, count }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+      scansByCountry,
+      scansByDevice,
+      scansByOs,
+      scansByBrowser,
+      scansByHour,
+      scansByWeekday,
+      topReferrers,
+      avgTimeOnPage: timeCount ? Math.round((totalTime / timeCount) * 100) / 100 : 0,
+      scrollRate: totalScans ? Math.round((scrollCount / totalScans) * 100) : 0,
+      locationGroups,
+      firstScanAt: firstScan?.timestamp,
+      lastScanAt: lastScan?.timestamp,
+      topLocation: locationGroups[0],
+      bestHour,
+      bestWeekday,
+      topDevice,
+      directScanCount,
+      referredScanCount,
+    };
+  }, [filteredScans]);
+
+  const filteredScanLog = useMemo(() => {
+    const query = scanLogSearch.trim().toLowerCase();
+    if (!query) return filteredScans;
+
+    return filteredScans.filter((scan) => [
+      scan.timestamp,
+      scan.country,
+      scan.region,
+      scan.city,
+      scan.postal_code,
+      scan.timezone,
+      scan.device_type,
+      scan.os_family,
+      scan.browser_family,
+      scan.referrer_domain,
+      scan.scan_method,
+      scan.ip_address,
+    ].some((value) => String(value || '').toLowerCase().includes(query)));
+  }, [filteredScans, scanLogSearch]);
+
+  const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.value === dateRange)?.label || 'Selected range';
+  const topLocationLabel = selectedStats.topLocation
+    ? [selectedStats.topLocation.city, selectedStats.topLocation.region, selectedStats.topLocation.country]
+      .filter((part) => part && part !== 'Unknown')
+      .join(', ') || 'Unknown'
+    : 'N/A';
+  const bestHourLabel = selectedStats.bestHour ? `${selectedStats.bestHour[0]}:00` : 'N/A';
+  const bestWeekdayLabel = selectedStats.bestWeekday ? WEEKDAYS[Number(selectedStats.bestWeekday[0])] : 'N/A';
+  const topDeviceLabel = selectedStats.topDevice ? selectedStats.topDevice[0] : 'N/A';
+  const directSplitData = [
+    { name: 'Direct / QR scan', value: selectedStats.directScanCount },
+    { name: 'Referred', value: selectedStats.referredScanCount },
+  ].filter((entry) => entry.value > 0);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -329,8 +616,8 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
   }
 
   return (
-    <Box minH="100vh" p={{ base: 4, md: 6 }}>
-      <Box maxW="1400px" mx="auto" h="100%">
+    <Box minH="100vh" p={{ base: 4, md: 6 }} maxW="100vw" overflowX="hidden">
+      <Box maxW="1400px" mx="auto" h="100%" w="100%" minW={0}>
       <Button 
         leftIcon={<FiArrowLeft />} 
         variant="ghost" 
@@ -427,7 +714,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                 </Button>
                 <Button
                   leftIcon={<FiCopy />}
-                  onClick={() => copyToClipboard(`${window.location.origin}/r/${qrCode.short_code}`)}
+                  onClick={() => copyToClipboard(qrCode.short_url || getShortUrl(qrCode.short_code))}
                 >
                   Copy Link
                 </Button>
@@ -503,13 +790,13 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                     <StatNumber fontSize="lg">{qrCode.short_code}</StatNumber>
                     <StatHelpText>
                       <HStack>
-                        <Text>{`${window.location.origin}/r/${qrCode.short_code}`}</Text>
+                        <Text>{qrCode.short_url || getShortUrl(qrCode.short_code)}</Text>
                         <IconButton
                           icon={<FiCopy size={14} />}
                           aria-label="Copy URL"
                           size="xs"
                           variant="ghost"
-                          onClick={() => copyToClipboard(`${window.location.origin}/r/${qrCode.short_code}`)}
+                          onClick={() => copyToClipboard(qrCode.short_url || getShortUrl(qrCode.short_code))}
                         />
                       </HStack>
                     </StatHelpText>
@@ -528,6 +815,44 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
         </CardBody>
       </Card>
 
+      <Card mb={6}>
+        <CardBody>
+          <Stack direction={{ base: 'column', md: 'row' }} spacing={4} align={{ base: 'stretch', md: 'end' }}>
+            <FormControl maxW={{ base: '100%', md: '240px' }}>
+              <FormLabel>Date range</FormLabel>
+              <Select value={dateRange} onChange={(event) => setDateRange(event.target.value as DateRangeKey)}>
+                {DATE_RANGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            </FormControl>
+            {dateRange === 'custom' && (
+              <>
+                <FormControl maxW={{ base: '100%', md: '180px' }}>
+                  <FormLabel>Start date</FormLabel>
+                  <Input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(event) => setCustomStartDate(event.target.value)}
+                  />
+                </FormControl>
+                <FormControl maxW={{ base: '100%', md: '180px' }}>
+                  <FormLabel>End date</FormLabel>
+                  <Input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(event) => setCustomEndDate(event.target.value)}
+                  />
+                </FormControl>
+              </>
+            )}
+            <Text color="gray.600" fontSize="sm">
+              Showing analytics for {dateRangeLabel.toLowerCase()} using your browser's local time.
+            </Text>
+          </Stack>
+        </CardBody>
+      </Card>
+
       <Tabs 
         variant="enclosed" 
         colorScheme="blue" 
@@ -537,13 +862,15 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
         isFitted
         isLazy
         w="100%"
+        minW={0}
         overflowX="auto"
       >
-        <TabList overflowX="auto" overflowY="hidden" pb={1} w="max-content" minW="100%">
+        <TabList overflowX="auto" overflowY="hidden" pb={1} w="100%">
           <Tab whiteSpace="nowrap" minW="max-content" px={4}><FiBarChart2 style={{ marginRight: '8px' }} /> Overview</Tab>
           <Tab whiteSpace="nowrap" minW="max-content" px={4}><FiGlobe style={{ marginRight: '8px' }} /> Locations</Tab>
           <Tab whiteSpace="nowrap" minW="max-content" px={4}><FiSmartphone style={{ marginRight: '8px' }} /> Devices</Tab>
           <Tab whiteSpace="nowrap" minW="max-content" px={4}><FiClock style={{ marginRight: '8px' }} /> Engagement</Tab>
+          <Tab whiteSpace="nowrap" minW="max-content" px={4}><FiBarChart2 style={{ marginRight: '8px' }} /> Scan Log</Tab>
         </TabList>
 
         <TabPanels>
@@ -556,32 +883,73 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
               w="100%"
             >
               <StatCard 
-                title="Total Scans" 
-                value={enhancedStats?.total_scans ?? 0} 
-                description="All time scans" 
+                title="Scans in Range" 
+                value={selectedStats.totalScans} 
+                description={dateRangeLabel} 
+              />
+              <StatCard 
+                title="First Scan" 
+                value={selectedStats.firstScanAt ? formatDateTime(selectedStats.firstScanAt) : 'No scans yet'} 
+                description="Earliest scan in range" 
+              />
+              <StatCard 
+                title="Last Scan" 
+                value={selectedStats.lastScanAt ? formatDateTime(selectedStats.lastScanAt) : 'No scans yet'} 
+                description="Most recent scan in range" 
+              />
+              <StatCard 
+                title="Top Location" 
+                value={topLocationLabel} 
+                description={selectedStats.topLocation ? `${selectedStats.topLocation.count} scans` : 'No location data'} 
+              />
+              <StatCard 
+                title="Best Scan Hour" 
+                value={bestHourLabel} 
+                description={selectedStats.bestHour ? `${selectedStats.bestHour[1]} scans, local time` : 'N/A'} 
+              />
+              <StatCard 
+                title="Best Scan Weekday" 
+                value={bestWeekdayLabel} 
+                description={selectedStats.bestWeekday ? `${selectedStats.bestWeekday[1]} scans, local time` : 'N/A'} 
+              />
+              <StatCard 
+                title="Direct vs Referred" 
+                value={`${selectedStats.directScanCount} / ${selectedStats.referredScanCount}`} 
+                description="Direct QR scans / referred visits" 
+              />
+              <StatCard 
+                title="Unique Locations" 
+                value={selectedStats.locationGroups.length || 'N/A'} 
+                description="Country, region, city, and postal groups" 
+              />
+              <StatCard 
+                title="Top Device" 
+                value={topDeviceLabel} 
+                description={selectedStats.topDevice ? `${selectedStats.topDevice[1]} scans` : 'N/A'} 
               />
               <StatCard 
                 title="Avg. Time on Page" 
-                value={enhancedStats?.avg_time_on_page ? `${enhancedStats.avg_time_on_page}s` : 'N/A'} 
-                description="Average engagement time" 
+                value={selectedStats.avgTimeOnPage ? `${selectedStats.avgTimeOnPage}s` : 'N/A'} 
+                description="Average engagement time in range" 
               />
               <StatCard 
                 title="Scroll Rate" 
-                value={enhancedStats?.scroll_rate ? `${enhancedStats.scroll_rate}%` : 'N/A'} 
-                description="Percentage of users who scrolled" 
+                value={selectedStats.totalScans ? `${selectedStats.scrollRate}%` : 'N/A'} 
+                description="Scans with recorded scrolling in range" 
               />
             </SimpleGrid>
 
-            <Card mb={6}>
+            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6} mb={6}>
+            <Card>
               <CardHeader>
                 <Heading size="md">Scan Activity</Heading>
               </CardHeader>
               <CardBody>
-                {scanData.length > 0 ? (
+                {selectedStats.dailyScans.length > 0 ? (
                   <Box minH="300px" w="100%" position="relative">
                     <Box position="absolute" top={0} left={0} right={0} bottom={0}>
                       <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={scanData}>
+                      <LineChart data={selectedStats.dailyScans}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
                           dataKey="date" 
@@ -613,67 +981,110 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                 )}
               </CardBody>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <Heading size="md">Direct vs Referred</Heading>
+              </CardHeader>
+              <CardBody>
+                {directSplitData.length > 0 ? (
+                  <Box minH="300px" w="100%" position="relative">
+                    <Box position="absolute" top={0} left={0} right={0} bottom={0}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={directSplitData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            outerRadius={85}
+                            fill="#8884d8"
+                            dataKey="value"
+                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          >
+                            {directSplitData.map((_, index) => (
+                              <Cell key={`direct-split-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <RechartsTooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box textAlign="center" py={10}>
+                    <Text color="gray.500">No referrer data available for this date range</Text>
+                  </Box>
+                )}
+              </CardBody>
+            </Card>
+            </SimpleGrid>
           </TabPanel>
 
           {/* Locations Tab */}
           <TabPanel p={0} pt={6}>
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+            <Alert status="info" mb={6} borderRadius="md">
+              <AlertIcon />
+              <Text>
+                Location is approximate and based on IP geolocation. It may identify a nearby city, region, or network location, not the scanner's exact physical address.
+              </Text>
+            </Alert>
+
+            <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={6}>
               <Card>
                 <CardHeader>
-                  <Heading size="md">Top Locations</Heading>
+                  <Heading size="md">Approximate Locations</Heading>
                 </CardHeader>
                 <CardBody>
-                  {enhancedStats?.scans_by_country && Object.keys(enhancedStats.scans_by_country).length > 0 ? (
-                    <Table variant="simple" size="sm">
-                      <Thead>
-                        <Tr>
-                          <Th>Location</Th>
-                          <Th isNumeric>Scans</Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {Object.entries(enhancedStats.scans_by_country)
-                          .sort((a, b) => b[1] - a[1])
-                          .map(([country, count]) => {
-                            // Get all scans for this country
-                            const countryScans = (enhancedStats.scans || []).filter(
-                              (scan: Scan) => scan.country === country
-                            );
-                            
-                            // Group by city, region
-                            const locations = countryScans.reduce((acc: Record<string, number>, scan: Scan) => {
-                              const key = `${scan.city || 'Unknown'}, ${scan.region || 'Unknown'}`;
-                              acc[key] = (acc[key] || 0) + 1;
-                              return acc;
-                            }, {} as Record<string, number>);
-                            
-                            return (
-                              <React.Fragment key={country}>
-                                <Tr bg="gray.50">
-                                  <Td colSpan={2} fontWeight="bold">
-                                    {country || 'Unknown'}
-                                    <Text as="span" ml={2} color="gray.500" fontWeight="normal">
-                                      ({count} scans)
-                                    </Text>
-                                  </Td>
-                                </Tr>
-                                {Object.entries(locations)
-                                  .sort((a, b) => (b[1] as number) - (a[1] as number))
-                                  .map(([location, locationCount]) => (
-                                    <Tr key={`${country}-${location}`}>
-                                      <Td pl={8} fontStyle="italic">
-                                        {location}
-                                      </Td>
-                                      <Td isNumeric>{locationCount as number}</Td>
-                                    </Tr>
-                                  ))}
-                              </React.Fragment>
-                            );
-                          })}
-                      </Tbody>
-                    </Table>
+                  {selectedStats.locationGroups.length > 0 ? (
+                    <Box overflowX="auto">
+                      <Table variant="simple" size="sm">
+                        <Thead>
+                          <Tr>
+                            <Th>Country</Th>
+                            <Th>Region</Th>
+                            <Th>City</Th>
+                            <Th>Postal Code</Th>
+                            <Th>Timezone</Th>
+                            <Th>Approx. Coordinates</Th>
+                            <Th>Accuracy</Th>
+                            <Th isNumeric>Scans</Th>
+                            <Th>Last Scanned</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {selectedStats.locationGroups.map((location) => (
+                            <Tr key={location.key}>
+                              <Td>
+                                <HStack spacing={2}>
+                                  <Text>{location.country}</Text>
+                                  {location.countryIso && <Badge>{location.countryIso}</Badge>}
+                                </HStack>
+                              </Td>
+                              <Td>
+                                <HStack spacing={2}>
+                                  <Text>{location.region}</Text>
+                                  {location.regionIso && <Badge>{location.regionIso}</Badge>}
+                                </HStack>
+                              </Td>
+                              <Td>{location.city}</Td>
+                              <Td>{location.postalCode}</Td>
+                              <Td>{location.timezone}</Td>
+                              <Td>
+                                {location.latitude && location.longitude
+                                  ? `${location.latitude}, ${location.longitude}`
+                                  : 'N/A'}
+                              </Td>
+                              <Td>{location.accuracyRadius || 'N/A'}</Td>
+                              <Td isNumeric>{location.count}</Td>
+                              <Td>{formatDateTime(location.lastScannedAt)}</Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </Box>
                   ) : (
-                    <Text color="gray.500">No location data available</Text>
+                    <Text color="gray.500">No location data available for this date range</Text>
                   )}
                 </CardBody>
               </Card>
@@ -683,8 +1094,8 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                   <Heading size="md">Top Referrers</Heading>
                 </CardHeader>
                 <CardBody>
-                  {enhancedStats?.top_referrers && Object.keys(enhancedStats.top_referrers).length > 0 ? (
-                    <Table variant="simple">
+                  {Object.keys(selectedStats.topReferrers).length > 0 ? (
+                    <Table variant="simple" size="sm">
                       <Thead>
                         <Tr>
                           <Th>Domain</Th>
@@ -692,10 +1103,11 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                         </Tr>
                       </Thead>
                       <Tbody>
-                        {Object.entries(enhancedStats.top_referrers)
+                        {Object.entries(selectedStats.topReferrers)
+                          .sort((a, b) => b[1] - a[1])
                           .map(([domain, count]) => (
                             <Tr key={domain}>
-                              <Td>{domain || 'Direct'}</Td>
+                              <Td>{domain}</Td>
                               <Td isNumeric>{count}</Td>
                             </Tr>
                           ))}
@@ -721,13 +1133,13 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                   <Heading size="md">Devices</Heading>
                 </CardHeader>
                 <CardBody>
-                  {enhancedStats?.scans_by_device && Object.keys(enhancedStats.scans_by_device).length > 0 ? (
+                  {Object.keys(selectedStats.scansByDevice).length > 0 ? (
                     <Box minH="300px" w="100%" position="relative">
                       <Box position="absolute" top={0} left={0} right={0} bottom={0}>
                         <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={Object.entries(enhancedStats.scans_by_device).map(([name, value]) => ({
+                            data={Object.entries(selectedStats.scansByDevice).map(([name, value]) => ({
                               name: name.charAt(0).toUpperCase() + name.slice(1),
                               value
                             }))}
@@ -739,7 +1151,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                             dataKey="value"
                             label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                           >
-                            {Object.entries(enhancedStats.scans_by_device).map((_, index) => (
+                            {Object.entries(selectedStats.scansByDevice).map((_, index) => (
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
@@ -759,7 +1171,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                   <Heading size="md">Operating Systems</Heading>
                 </CardHeader>
                 <CardBody>
-                  {enhancedStats?.scans_by_os && Object.keys(enhancedStats.scans_by_os).length > 0 ? (
+                  {Object.keys(selectedStats.scansByOs).length > 0 ? (
                     <Table variant="simple">
                       <Thead>
                         <Tr>
@@ -768,7 +1180,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                         </Tr>
                       </Thead>
                       <Tbody>
-                        {Object.entries(enhancedStats.scans_by_os)
+                        {Object.entries(selectedStats.scansByOs)
                           .sort((a, b) => b[1] - a[1])
                           .map(([os, count]) => (
                             <Tr key={os}>
@@ -789,7 +1201,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                   <Heading size="md">Browsers</Heading>
                 </CardHeader>
                 <CardBody>
-                  {enhancedStats?.scans_by_browser && Object.keys(enhancedStats.scans_by_browser).length > 0 ? (
+                  {Object.keys(selectedStats.scansByBrowser).length > 0 ? (
                     <Table variant="simple">
                       <Thead>
                         <Tr>
@@ -798,7 +1210,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                         </Tr>
                       </Thead>
                       <Tbody>
-                        {Object.entries(enhancedStats.scans_by_browser)
+                        {Object.entries(selectedStats.scansByBrowser)
                           .sort((a, b) => b[1] - a[1])
                           .map(([browser, count]) => (
                             <Tr key={browser}>
@@ -824,12 +1236,12 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                   <Heading size="md">Scans by Hour</Heading>
                 </CardHeader>
                 <CardBody>
-                  {enhancedStats?.scans_by_hour ? (
+                  {Object.keys(selectedStats.scansByHour).length > 0 ? (
                     <Box minH="300px" w="100%" position="relative">
                       <Box position="absolute" top={0} left={0} right={0} bottom={0}>
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart
-                            data={Object.entries(enhancedStats.scans_by_hour).map(([hour, count]) => ({
+                            data={Object.entries(selectedStats.scansByHour).map(([hour, count]) => ({
                               hour: `${hour}:00`,
                               scans: count
                             }))}
@@ -855,20 +1267,15 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                   <Heading size="md">Scans by Weekday</Heading>
                 </CardHeader>
                 <CardBody>
-                  {enhancedStats?.scans_by_weekday ? (
+                  {Object.keys(selectedStats.scansByWeekday).length > 0 ? (
                     <Box minH="300px" w="100%" position="relative">
                       <Box position="absolute" top={0} left={0} right={0} bottom={0}>
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart
-                            data={[
-                              { name: 'Sun', scans: enhancedStats.scans_by_weekday['0'] || 0 },
-                              { name: 'Mon', scans: enhancedStats.scans_by_weekday['1'] || 0 },
-                              { name: 'Tue', scans: enhancedStats.scans_by_weekday['2'] || 0 },
-                              { name: 'Wed', scans: enhancedStats.scans_by_weekday['3'] || 0 },
-                              { name: 'Thu', scans: enhancedStats.scans_by_weekday['4'] || 0 },
-                              { name: 'Fri', scans: enhancedStats.scans_by_weekday['5'] || 0 },
-                              { name: 'Sat', scans: enhancedStats.scans_by_weekday['6'] || 0 },
-                            ]}
+                            data={SHORT_WEEKDAYS.map((name, index) => ({
+                              name,
+                              scans: selectedStats.scansByWeekday[String(index)] || 0,
+                            }))}
                             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" />
@@ -886,6 +1293,83 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                 </CardBody>
               </Card>
             </SimpleGrid>
+          </TabPanel>
+
+          {/* Scan Log Tab */}
+          <TabPanel p={0} pt={6}>
+            <Card>
+              <CardHeader>
+                <Stack direction={{ base: 'column', md: 'row' }} justify="space-between" align={{ base: 'stretch', md: 'center' }} spacing={4}>
+                  <Box>
+                    <Heading size="md">Scan Log</Heading>
+                    <Text color="gray.600" fontSize="sm" mt={1}>
+                      {filteredScanLog.length} scans shown for {dateRangeLabel.toLowerCase()}
+                    </Text>
+                  </Box>
+                  <Input
+                    value={scanLogSearch}
+                    onChange={(event) => setScanLogSearch(event.target.value)}
+                    placeholder="Search scans"
+                    maxW={{ base: '100%', md: '280px' }}
+                  />
+                </Stack>
+              </CardHeader>
+              <CardBody>
+                {filteredScanLog.length > 0 ? (
+                  <Box overflowX="auto">
+                    <Table variant="simple" size="sm">
+                      <Thead>
+                        <Tr>
+                          <Th>Timestamp</Th>
+                          <Th>Country</Th>
+                          <Th>Region/State</Th>
+                          <Th>City</Th>
+                          <Th>Postal Code</Th>
+                          <Th>Timezone</Th>
+                          <Th>Approx. Coordinates</Th>
+                          <Th>Accuracy</Th>
+                          <Th>Device</Th>
+                          <Th>OS</Th>
+                          <Th>Browser</Th>
+                          <Th>Referrer</Th>
+                          <Th>Scan Method</Th>
+                          <Th>IP Address</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {filteredScanLog.map((scan) => {
+                          const latitude = formatCoordinate(scan.latitude);
+                          const longitude = formatCoordinate(scan.longitude);
+
+                          return (
+                            <Tr key={scan.id}>
+                              <Td whiteSpace="nowrap">{formatDateTime(scan.timestamp)}</Td>
+                              <Td>{scan.country || 'Unknown'}</Td>
+                              <Td>{scan.region || 'Unknown'}</Td>
+                              <Td>{scan.city || 'Unknown'}</Td>
+                              <Td>{scan.postal_code || 'N/A'}</Td>
+                              <Td>{scan.timezone || 'N/A'}</Td>
+                              <Td>{latitude && longitude ? `${latitude}, ${longitude}` : 'N/A'}</Td>
+                              <Td>{formatAccuracyRadius(scan) || 'N/A'}</Td>
+                              <Td>{scan.device_type || 'Unknown'}</Td>
+                              <Td>{scan.os_family || 'Unknown'}</Td>
+                              <Td>{scan.browser_family || 'Unknown'}</Td>
+                              <Td>{scan.referrer_domain || 'Direct / QR scan'}</Td>
+                              <Td>{scan.scan_method || 'N/A'}</Td>
+                              <Td color="gray.500" fontFamily="mono">{maskIpAddress(scan.ip_address)}</Td>
+                            </Tr>
+                          );
+                        })}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                ) : (
+                  <Box textAlign="center" py={10}>
+                    <Text color="gray.500">No scans match the selected date range or search.</Text>
+                  </Box>
+                )}
+              </CardBody>
+            </Card>
           </TabPanel>
         </TabPanels>
       </Tabs>
