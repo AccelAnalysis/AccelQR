@@ -8,6 +8,9 @@ import {
   Flex, 
   Heading, 
   HStack, 
+  Input,
+  InputGroup,
+  InputLeftElement,
   Spinner, 
   Table, 
   Tbody, 
@@ -25,9 +28,11 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
-  IconButton
+  IconButton,
+  Tooltip,
+  VStack
  } from '@chakra-ui/react';
-import { FiRefreshCw, FiDownload, FiCode, FiBarChart2, FiTrendingUp, FiMoreHorizontal } from 'react-icons/fi';
+import { FiRefreshCw, FiDownload, FiCode, FiBarChart2, FiTrendingUp, FiMoreHorizontal, FiSearch, FiCopy, FiExternalLink, FiEye, FiX } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Link as RouterLink } from 'react-router-dom';
 // Added import for the new page
@@ -75,6 +80,73 @@ interface DashboardStats {
 }
 
 type SortableField = keyof Pick<QRCode, 'name' | 'short_code' | 'scan_count' | 'created_at' | 'last_scanned_at' | 'folder'>;
+type ScanStatusFilter = 'all' | 'never' | 'today' | 'recent' | 'inactive';
+type CreatedDateFilter = 'all' | '7d' | '30d' | '90d';
+type LastScannedDateFilter = 'all' | '24h' | '7d' | '30d' | 'never';
+
+const SCAN_STATUS_OPTIONS: Array<{ value: ScanStatusFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'never', label: 'Never Scanned' },
+  { value: 'today', label: 'Active Today' },
+  { value: 'recent', label: 'Recently Active' },
+  { value: 'inactive', label: 'Inactive' },
+];
+
+const CREATED_DATE_OPTIONS: Array<{ value: CreatedDateFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: '90d', label: 'Last 90 days' },
+];
+
+const LAST_SCANNED_DATE_OPTIONS: Array<{ value: LastScannedDateFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: '24h', label: 'Last 24 hours' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: 'never', label: 'Never Scanned' },
+];
+
+const getAppBaseUrl = () => API_URL.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+const getShortUrl = (shortCode: string) => `${getAppBaseUrl()}/r/${shortCode}`;
+
+const getStartOfToday = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+};
+
+const getDaysAgo = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date;
+};
+
+const isToday = (dateString: string | null) => {
+  if (!dateString) return false;
+  return new Date(dateString) >= getStartOfToday();
+};
+
+const isWithinDays = (dateString: string | null, days: number) => {
+  if (!dateString) return false;
+  return new Date(dateString) >= getDaysAgo(days);
+};
+
+const getScanStatus = (qr: QRCode): { key: Exclude<ScanStatusFilter, 'all'> | 'active'; label: string; colorScheme: string } => {
+  if (qr.scan_count === 0 || !qr.last_scanned_at) {
+    return { key: 'never', label: 'Never Scanned', colorScheme: 'gray' };
+  }
+  if (isToday(qr.last_scanned_at)) {
+    return { key: 'today', label: 'Active Today', colorScheme: 'green' };
+  }
+  if (isWithinDays(qr.last_scanned_at, 7)) {
+    return { key: 'recent', label: 'Recently Active', colorScheme: 'blue' };
+  }
+  if (!isWithinDays(qr.last_scanned_at, 30)) {
+    return { key: 'inactive', label: 'Inactive', colorScheme: 'orange' };
+  }
+  return { key: 'active', label: 'Scanned', colorScheme: 'teal' };
+};
 
 // Stat card component
 const StatCard = ({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) => (
@@ -100,7 +172,10 @@ const Dashboard = () => {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<string>('30d');
-  const [newFolderName, setNewFolderName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [scanStatusFilter, setScanStatusFilter] = useState<ScanStatusFilter>('all');
+  const [createdDateFilter, setCreatedDateFilter] = useState<CreatedDateFilter>('all');
+  const [lastScannedDateFilter, setLastScannedDateFilter] = useState<LastScannedDateFilter>('all');
   const toast = useToast();
   
   // Time range options for the dashboard - memoized to prevent unnecessary re-renders
@@ -243,58 +318,34 @@ const Dashboard = () => {
     ]);
   }, [activeFolder, timeRange, fetchQRCodes, fetchDashboardStats]);
 
-  // Export single QR code (new endpoint)
-  const handleExportNew = useCallback(async (id: number) => {
-    try {
-      const response = await apiClient.get(`${API_URL}/newstats/qrcode/${id}/quickstats`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `qrcode-export-${id}-${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast({ title: 'Export successful', description: 'QR code exported.', status: 'success', duration: 3000, isClosable: true });
-    } catch {
-
-      toast({ title: 'Export failed', description: 'Failed to export QR code.', status: 'error', duration: 5000, isClosable: true });
-    }
+  const copyShortLink = useCallback(async (shortCode: string) => {
+    const shortUrl = getShortUrl(shortCode);
+    await navigator.clipboard.writeText(shortUrl);
+    toast({
+      title: 'Short link copied',
+      description: shortUrl,
+      status: 'success',
+      duration: 2500,
+      isClosable: true,
+    });
   }, [toast]);
 
-  // Folder-level export (new endpoint)
-  const handleExportFolderNew = useCallback(async (folder: string) => {
-    try {
-      const response = await apiClient.get(`${API_URL}/newstats/export?folder=${encodeURIComponent(folder)}`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `folder-export-${folder}-${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast({ title: 'Export successful', description: `Folder ${folder} exported.`, status: 'success', duration: 3000, isClosable: true });
-    } catch {
+  const downloadQrImage = useCallback((qr: QRCode) => {
+    const link = document.createElement('a');
+    link.href = `${API_URL}/qrcodes/image-by-shortcode/${qr.short_code}`;
+    link.download = `qrcode-${qr.short_code}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }, []);
 
-      toast({ title: 'Export failed', description: 'Failed to export folder.', status: 'error', duration: 5000, isClosable: true });
-    }
-  }, [toast]);
-
-  // Folder creation (new endpoint)
-  const handleCreateFolderNew = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!newFolderName.trim()) return;
-    try {
-      await apiClient.post(`${API_URL}/newstats/folders`, { name: newFolderName });
-      toast({ title: 'Folder created', description: `Folder "${newFolderName}" created.`, status: 'success', duration: 3000, isClosable: true });
-      setNewFolderName('');
-      refreshData();
-    } catch {
-
-      toast({ title: 'Error', description: 'Could not create folder.', status: 'error', duration: 5000, isClosable: true });
-    }
-  }, [newFolderName, toast, refreshData]);
+  const clearFilters = useCallback(() => {
+    setSearchQuery('');
+    setScanStatusFilter('all');
+    setCreatedDateFilter('all');
+    setLastScannedDateFilter('all');
+    setActiveFolder(null);
+  }, []);
   
   // Sort configuration state
   const [sortConfig, setSortConfig] = useState<{
@@ -321,15 +372,77 @@ const Dashboard = () => {
     return sortConfig.direction === 'ascending' ? ' ↑' : ' ↓';
   }, [sortConfig]);
   
+  const hasActiveFilters = Boolean(
+    searchQuery.trim()
+    || activeFolder
+    || scanStatusFilter !== 'all'
+    || createdDateFilter !== 'all'
+    || lastScannedDateFilter !== 'all'
+  );
+
+  const folderCounts = useMemo(() => {
+    return qrcodes.reduce((counts, qr) => {
+      if (qr.folder) {
+        counts[qr.folder] = (counts[qr.folder] || 0) + 1;
+      }
+      return counts;
+    }, {} as Record<string, number>);
+  }, [qrcodes]);
+
+  const filteredQRCodes = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+
+    return qrcodes.filter(qr => {
+      if (activeFolder && qr.folder !== activeFolder) {
+        return false;
+      }
+
+      if (normalizedSearch) {
+        const searchable = [
+          qr.name,
+          qr.short_code,
+          qr.target_url,
+          qr.folder || '',
+        ].join(' ').toLowerCase();
+        if (!searchable.includes(normalizedSearch)) {
+          return false;
+        }
+      }
+
+      if (scanStatusFilter !== 'all') {
+        const status = getScanStatus(qr).key;
+        if (scanStatusFilter === 'inactive') {
+          if (status !== 'inactive' && status !== 'never') return false;
+        } else if (status !== scanStatusFilter) {
+          return false;
+        }
+      }
+
+      if (createdDateFilter !== 'all') {
+        const days = Number(createdDateFilter.replace('d', ''));
+        if (!isWithinDays(qr.created_at, days)) {
+          return false;
+        }
+      }
+
+      if (lastScannedDateFilter !== 'all') {
+        if (lastScannedDateFilter === 'never') {
+          if (qr.last_scanned_at) return false;
+        } else {
+          const days = lastScannedDateFilter === '24h' ? 1 : Number(lastScannedDateFilter.replace('d', ''));
+          if (!isWithinDays(qr.last_scanned_at, days)) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  }, [qrcodes, activeFolder, searchQuery, scanStatusFilter, createdDateFilter, lastScannedDateFilter]);
+
   // Sort and filter QR codes
   const sortedQRCodes = useMemo(() => {
-    const sortableItems = [...qrcodes];
-    
-    // Filter by active folder
-    const filtered = sortableItems.filter(qr => {
-      const matchesFolder = !activeFolder || qr.folder === activeFolder;
-      return matchesFolder;
-    });
+    const filtered = [...filteredQRCodes];
 
     // Sort the filtered results
     return [...filtered].sort((a, b) => {
@@ -355,7 +468,7 @@ const Dashboard = () => {
       }
       return 0;
     });
-  }, [qrcodes, sortConfig, activeFolder]);
+  }, [filteredQRCodes, sortConfig]);
 
   // QR Code Table component
   const QRCodeTable = useMemo(() => {
@@ -371,8 +484,15 @@ const Dashboard = () => {
       return (
         <Box textAlign="center" py={10}>
           <Text fontSize="lg" color="gray.500">
-            No QR codes found{activeFolder ? ` in ${activeFolder}` : ''}
+            {hasActiveFilters
+              ? 'No QR codes match the current search or filters.'
+              : 'No QR codes found'}
           </Text>
+          {hasActiveFilters && (
+            <Button mt={4} size="sm" variant="outline" onClick={clearFilters} leftIcon={<FiX />}>
+              Clear filters
+            </Button>
+          )}
         </Box>
       );
     }
@@ -403,6 +523,7 @@ const Dashboard = () => {
             >
               Scans {getSortIndicator('scan_count')}
             </Th>
+            <Th>Status</Th>
             <Th 
               cursor="pointer" 
               onClick={() => requestSort('last_scanned_at')}
@@ -441,6 +562,11 @@ const Dashboard = () => {
                 <code>{qr.short_code}</code>
               </Td>
               <Td isNumeric>{formatNumber(qr.scan_count)}</Td>
+              <Td>
+                <Badge colorScheme={getScanStatus(qr).colorScheme}>
+                  {getScanStatus(qr).label}
+                </Badge>
+              </Td>
               <Td>{qr.last_scanned_at ? formatDate(qr.last_scanned_at) : '-'}</Td>
               <Td>{formatDate(qr.created_at)}</Td>
               <Td>
@@ -451,28 +577,49 @@ const Dashboard = () => {
                 )}
               </Td>
               <Td>
-                <Menu>
-                  <MenuButton
-                    as={IconButton}
-                    aria-label="More options"
-                    icon={<FiMoreHorizontal />}
-                    variant="ghost"
-                    size="sm"
-                  />
-                  <MenuList>
-                    <MenuItem as={RouterLink} to={`/qrcodes/${qr.id}`}>View Stats</MenuItem>
-                    <MenuItem as={RouterLink} to={`/newstats/${qr.id}`}>New Stats View</MenuItem>
-                    <MenuItem onClick={() => handleExportNew(qr.id)} icon={<FiDownload />}>Export (New)</MenuItem>
-                    <MenuItem onClick={() => handleExportFolderNew(qr.folder || '')} icon={<FiDownload />}>Export Folder (New)</MenuItem>
-                  </MenuList>
-                </Menu>
+                <HStack spacing={1} justify="flex-end">
+                  <Tooltip label="View details">
+                    <IconButton
+                      as={RouterLink}
+                      to={`/qrcodes/${qr.id}`}
+                      aria-label={`View details for ${qr.name}`}
+                      icon={<FiEye />}
+                      variant="ghost"
+                      size="sm"
+                    />
+                  </Tooltip>
+                  <Tooltip label="Copy short link">
+                    <IconButton
+                      aria-label={`Copy short link for ${qr.name}`}
+                      icon={<FiCopy />}
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyShortLink(qr.short_code)}
+                    />
+                  </Tooltip>
+                  <Menu>
+                    <MenuButton
+                      as={IconButton}
+                      aria-label={`More actions for ${qr.name}`}
+                      icon={<FiMoreHorizontal />}
+                      variant="ghost"
+                      size="sm"
+                    />
+                    <MenuList>
+                      <MenuItem as={RouterLink} to={`/qrcodes/${qr.id}`} icon={<FiEye />}>View details</MenuItem>
+                      <MenuItem onClick={() => copyShortLink(qr.short_code)} icon={<FiCopy />}>Copy short link</MenuItem>
+                      <MenuItem onClick={() => window.open(qr.target_url, '_blank', 'noopener,noreferrer')} icon={<FiExternalLink />}>Open destination</MenuItem>
+                      <MenuItem onClick={() => downloadQrImage(qr)} icon={<FiDownload />}>Download QR image</MenuItem>
+                    </MenuList>
+                  </Menu>
+                </HStack>
               </Td>
             </Tr>
           ))}
         </Tbody>
       </Table>
     );
-  }, [loading, sortedQRCodes, activeFolder, requestSort, getSortIndicator, formatNumber, formatDate, handleExportNew, handleExportFolderNew]);
+  }, [loading, sortedQRCodes, hasActiveFilters, clearFilters, requestSort, getSortIndicator, formatNumber, formatDate, copyShortLink, downloadQrImage]);
 
   // Dashboard stats component
   const DashboardStatsCard = useMemo(() => {
@@ -550,10 +697,10 @@ const Dashboard = () => {
   
   // Main render
   return (
-    <Box p={6}>
-      <Flex justify="space-between" align="center" mb={6}>
+    <Box p={{ base: 4, md: 6 }}>
+      <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap={4} mb={6}>
         <Heading size="lg">Dashboard</Heading>
-        <HStack spacing={4} mb={4}>
+        <HStack spacing={4}>
           <Button 
             leftIcon={<FiRefreshCw />} 
             onClick={refreshData}
@@ -563,39 +710,80 @@ const Dashboard = () => {
             Refresh
           </Button>
         </HStack>
-      {/* New Folder Creation UI */}
-      <Box mb={4}>
-        <form onSubmit={handleCreateFolderNew} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input
-            placeholder="New Folder Name"
-            value={newFolderName}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewFolderName(e.target.value)}
-            style={{ padding: 4, borderRadius: 4, border: '1px solid #CBD5E0', fontSize: 14 }}
-          />
-          <Button type="submit" size="sm" colorScheme="teal">Create Folder (New)</Button>
-        </form>
-      </Box>
-
       </Flex>
       
-      <Flex>
+      <Flex direction={{ base: 'column', lg: 'row' }} align="flex-start" gap={6}>
         {/* Sidebar */}
-        <Box width="250px" mr={6}>
+        <Box width={{ base: '100%', lg: '250px' }} flexShrink={0}>
           <FolderSidebar 
             activeFolder={activeFolder}
             onSelectFolder={handleFolderSelect}
+            totalCount={qrcodes.length}
+            folderCounts={folderCounts}
           />
         </Box>
         
         {/* Main content */}
-        <Box flex={1}>
+        <Box flex={1} minW={0} w="100%">
           {DashboardStatsCard}
           <Card>
             <CardHeader>
-              <Heading size="md">QR Codes</Heading>
+              <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap={3}>
+                <Box>
+                  <Heading size="md">QR Codes</Heading>
+                  <Text color="gray.500" fontSize="sm" mt={1}>
+                    Showing {formatNumber(sortedQRCodes.length)} of {formatNumber(qrcodes.length)} QR codes
+                  </Text>
+                </Box>
+                {hasActiveFilters && (
+                  <Button size="sm" variant="outline" leftIcon={<FiX />} onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                )}
+              </Flex>
             </CardHeader>
             <CardBody>
-              {QRCodeTable}
+              <VStack spacing={4} align="stretch" mb={4}>
+                <InputGroup>
+                  <InputLeftElement pointerEvents="none">
+                    <FiSearch color="gray" />
+                  </InputLeftElement>
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search by name, short code, target URL, or folder"
+                  />
+                </InputGroup>
+                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+                  <Box>
+                    <Text fontSize="sm" fontWeight="medium" mb={1}>Scan status</Text>
+                    <Select value={scanStatusFilter} onChange={(event) => setScanStatusFilter(event.target.value as ScanStatusFilter)}>
+                      {SCAN_STATUS_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </Select>
+                  </Box>
+                  <Box>
+                    <Text fontSize="sm" fontWeight="medium" mb={1}>Created</Text>
+                    <Select value={createdDateFilter} onChange={(event) => setCreatedDateFilter(event.target.value as CreatedDateFilter)}>
+                      {CREATED_DATE_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </Select>
+                  </Box>
+                  <Box>
+                    <Text fontSize="sm" fontWeight="medium" mb={1}>Last scanned</Text>
+                    <Select value={lastScannedDateFilter} onChange={(event) => setLastScannedDateFilter(event.target.value as LastScannedDateFilter)}>
+                      {LAST_SCANNED_DATE_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </Select>
+                  </Box>
+                </SimpleGrid>
+              </VStack>
+              <Box overflowX="auto">
+                {QRCodeTable}
+              </Box>
             </CardBody>
           </Card>
         </Box>
@@ -605,4 +793,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

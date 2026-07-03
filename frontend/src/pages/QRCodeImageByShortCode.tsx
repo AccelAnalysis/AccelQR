@@ -17,7 +17,7 @@ const QRCodeImageByShortCode: React.FC = () => {
       // Assumes backend is served at the same origin or proxy
       const url = `/api/qrcodes/image-by-shortcode/${shortCode}`;
       setImgUrl(url);
-    } catch (err: any) {
+    } catch {
       setError("Could not generate QR code image.");
     }
   };
