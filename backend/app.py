@@ -58,9 +58,15 @@ def lookup_scan_location(ip_address):
             response = reader.city(ip_address)
             return {
                 'country': response.country.name,
+                'country_iso_code': response.country.iso_code,
                 'region': response.subdivisions.most_specific.name,
+                'region_iso_code': response.subdivisions.most_specific.iso_code,
                 'city': response.city.name,
-                'timezone': response.location.time_zone
+                'postal_code': response.postal.code,
+                'timezone': response.location.time_zone,
+                'latitude': response.location.latitude,
+                'longitude': response.location.longitude,
+                'accuracy_radius': response.location.accuracy_radius
             }
     except (ValueError, geoip2.errors.AddressNotFoundError):
         return {}
@@ -259,9 +265,15 @@ def create_app():
                 ip_address=request.remote_addr,
                 user_agent=request.user_agent.string,
                 country=location.get('country'),
+                country_iso_code=location.get('country_iso_code'),
                 region=location.get('region'),
+                region_iso_code=location.get('region_iso_code'),
                 city=location.get('city'),
+                postal_code=location.get('postal_code'),
                 timezone=location.get('timezone'),
+                latitude=location.get('latitude'),
+                longitude=location.get('longitude'),
+                accuracy_radius=location.get('accuracy_radius'),
                 device_type=user_agent.device.family,
                 os_family=user_agent.os.family,
                 browser_family=user_agent.browser.family,
@@ -317,6 +329,18 @@ def create_app():
                 'id': scan.id,
                 'timestamp': scan.timestamp.isoformat(),
                 'ip_address': scan.ip_address,
+                'user_agent': scan.user_agent,
+                'country': scan.country,
+                'country_iso_code': scan.country_iso_code,
+                'region': scan.region,
+                'region_iso_code': scan.region_iso_code,
+                'subdivision_iso_code': scan.region_iso_code,
+                'city': scan.city,
+                'postal_code': scan.postal_code,
+                'timezone': scan.timezone,
+                'latitude': scan.latitude,
+                'longitude': scan.longitude,
+                'accuracy_radius': scan.accuracy_radius,
                 'device_type': scan.device_type,
                 'os_family': scan.os_family,
                 'browser_family': scan.browser_family,

@@ -31,8 +31,8 @@ A full-stack application for generating and managing QR codes with analytics.
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/qr-tracker.git
-   cd qr-tracker
+   git clone https://github.com/AccelAnalysis/AccelQR.git
+   cd AccelQR
    ```
 
 2. **Run the setup script**
@@ -47,8 +47,8 @@ If you prefer to set up manually, follow these steps:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/qr-tracker.git
-   cd qr-tracker
+   git clone https://github.com/AccelAnalysis/AccelQR.git
+   cd AccelQR
    ```
 
 2. **Set up the backend**

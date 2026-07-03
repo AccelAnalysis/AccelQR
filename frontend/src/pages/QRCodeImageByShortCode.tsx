@@ -1,9 +1,11 @@
 import React, { useState } from "react";
+import apiClient from "../api/client";
 
 const QRCodeImageByShortCode: React.FC = () => {
   const [shortCode, setShortCode] = useState("");
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,8 +19,32 @@ const QRCodeImageByShortCode: React.FC = () => {
       // Assumes backend is served at the same origin or proxy
       const url = `/api/qrcodes/image-by-shortcode/${shortCode}`;
       setImgUrl(url);
-    } catch (err: any) {
+    } catch {
       setError("Could not generate QR code image.");
+    }
+  };
+
+  const handleDownloadCsv = async () => {
+    if (!shortCode.trim()) return;
+
+    try {
+      setIsDownloading(true);
+      setError(null);
+      const response = await apiClient.get(`/qrcodes/scans-csv/${shortCode}`, {
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `scans_${shortCode}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError("Could not download scan stats. Please sign in and try again.");
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -48,9 +74,10 @@ const QRCodeImageByShortCode: React.FC = () => {
       )}
       {shortCode && (
         <div style={{ textAlign: "center", marginTop: 24 }}>
-          <a
-            href={`/api/qrcodes/scans-csv/${shortCode}`}
-            download={`scans_${shortCode}.csv`}
+          <button
+            type="button"
+            onClick={handleDownloadCsv}
+            disabled={isDownloading}
             style={{
               display: 'inline-block',
               padding: '8px 16px',
@@ -58,12 +85,15 @@ const QRCodeImageByShortCode: React.FC = () => {
               background: '#319795',
               color: '#fff',
               borderRadius: 4,
+              border: 0,
+              cursor: isDownloading ? 'not-allowed' : 'pointer',
               textDecoration: 'none',
-              marginTop: 8
+              marginTop: 8,
+              opacity: isDownloading ? 0.7 : 1
             }}
           >
-            Download Scan Stats (CSV)
-          </a>
+            {isDownloading ? "Downloading..." : "Download Scan Stats (CSV)"}
+          </button>
         </div>
       )}
     </div>

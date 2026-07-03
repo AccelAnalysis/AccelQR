@@ -6,6 +6,32 @@ from datetime import datetime
 
 bp = Blueprint('qrcodes_stats', __name__, url_prefix='/api/qrcodes')
 
+def scan_to_dict(scan):
+    return {
+        'id': scan.id,
+        'timestamp': scan.timestamp.isoformat() if scan.timestamp else None,
+        'ip_address': scan.ip_address,
+        'user_agent': scan.user_agent,
+        'country': scan.country,
+        'country_iso_code': scan.country_iso_code,
+        'region': scan.region,
+        'region_iso_code': scan.region_iso_code,
+        'subdivision_iso_code': scan.region_iso_code,
+        'city': scan.city,
+        'postal_code': scan.postal_code,
+        'timezone': scan.timezone,
+        'latitude': scan.latitude,
+        'longitude': scan.longitude,
+        'accuracy_radius': scan.accuracy_radius,
+        'device_type': scan.device_type,
+        'os_family': scan.os_family,
+        'browser_family': scan.browser_family,
+        'referrer_domain': scan.referrer_domain,
+        'time_on_page': scan.time_on_page,
+        'scrolled': scan.scrolled,
+        'scan_method': scan.scan_method
+    }
+
 @bp.route('/<int:qrcode_id>/stats', methods=['GET'])
 @jwt_required()
 def qrcode_stats(qrcode_id):
@@ -40,7 +66,10 @@ def qrcode_enhanced_stats(qrcode_id):
     ).order_by(
         func.date(Scan.timestamp)
     ).all()
-    formatted_daily_scans = [{'date': date.isoformat(), 'count': count} for date, count in daily_scans]
+    formatted_daily_scans = [
+        {'date': date.isoformat() if hasattr(date, 'isoformat') else date, 'count': count}
+        for date, count in daily_scans
+    ]
 
     # All-time scan list and aggregated stats
     scans = Scan.query.filter_by(qr_code_id=qrcode_id).all()
@@ -52,34 +81,57 @@ def qrcode_enhanced_stats(qrcode_id):
     scans_by_browser = defaultdict(int)
     scans_by_hour = defaultdict(int)
     scans_by_weekday = defaultdict(int)
+    scans_by_region = defaultdict(int)
+    scans_by_city = defaultdict(int)
+    scans_by_postal_code = defaultdict(int)
+    location_summaries = {}
     top_referrers = defaultdict(int)
     total_time = 0
     scroll_count = 0
 
     for scan in scans:
         # Raw scan data
-        scan_list.append({
-            'id': scan.id,
-            'timestamp': scan.timestamp.isoformat() if scan.timestamp else None,
-            'ip_address': scan.ip_address,
-            'user_agent': scan.user_agent,
-            'country': scan.country,
-            'region': scan.region,
-            'city': scan.city,
-            'device_type': scan.device_type,
-            'os_family': scan.os_family,
-            'browser_family': scan.browser_family,
-            'referrer_domain': scan.referrer_domain,
-            'time_on_page': scan.time_on_page,
-            'scrolled': scan.scrolled,
-            'scan_method': scan.scan_method
-        })
+        scan_list.append(scan_to_dict(scan))
 
         # Aggregations
         scans_by_country[scan.country or 'Unknown'] += 1
+        scans_by_region[scan.region or 'Unknown'] += 1
+        scans_by_city[scan.city or 'Unknown'] += 1
+        scans_by_postal_code[scan.postal_code or 'Unknown'] += 1
         scans_by_device[scan.device_type or 'Unknown'] += 1
         scans_by_os[scan.os_family or 'Unknown'] += 1
         scans_by_browser[scan.browser_family or 'Unknown'] += 1
+        location_key = (
+            scan.country or 'Unknown',
+            scan.region or 'Unknown',
+            scan.city or 'Unknown',
+            scan.postal_code or 'Unknown',
+            scan.timezone or 'Unknown',
+            scan.latitude,
+            scan.longitude,
+            scan.accuracy_radius
+        )
+        summary = location_summaries.setdefault(location_key, {
+            'country': scan.country,
+            'country_iso_code': scan.country_iso_code,
+            'region': scan.region,
+            'region_iso_code': scan.region_iso_code,
+            'subdivision_iso_code': scan.region_iso_code,
+            'city': scan.city,
+            'postal_code': scan.postal_code,
+            'timezone': scan.timezone,
+            'latitude': scan.latitude,
+            'longitude': scan.longitude,
+            'accuracy_radius': scan.accuracy_radius,
+            'scan_count': 0,
+            'last_scanned_at': None
+        })
+        summary['scan_count'] += 1
+        if scan.timestamp and (
+            summary['last_scanned_at'] is None
+            or scan.timestamp.isoformat() > summary['last_scanned_at']
+        ):
+            summary['last_scanned_at'] = scan.timestamp.isoformat()
 
         if scan.timestamp:
             scans_by_hour[scan.timestamp.hour] += 1
@@ -104,6 +156,9 @@ def qrcode_enhanced_stats(qrcode_id):
         'total_scans': total_scans,
         'daily_scans': formatted_daily_scans,
         'scans_by_country': dict(scans_by_country),
+        'scans_by_region': dict(scans_by_region),
+        'scans_by_city': dict(scans_by_city),
+        'scans_by_postal_code': dict(scans_by_postal_code),
         'scans_by_device': dict(scans_by_device),
         'scans_by_os': dict(scans_by_os),
         'scans_by_browser': dict(scans_by_browser),
@@ -112,6 +167,11 @@ def qrcode_enhanced_stats(qrcode_id):
         'avg_time_on_page': avg_time_on_page,
         'scroll_rate': scroll_rate,
         'top_referrers': dict(top_referrers),
+        'location_summaries': sorted(
+            location_summaries.values(),
+            key=lambda item: item['scan_count'],
+            reverse=True
+        ),
         'scans': scan_list,
         
     })

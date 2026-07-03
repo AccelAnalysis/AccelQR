@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
+  Alert,
+  AlertIcon,
   Box, 
   Button, 
   Card, 
@@ -77,13 +79,21 @@ interface ScanData {
 }
 
 interface Scan {
-  id: string;
+  id: string | number;
   timestamp: string;
   user_agent?: string;
   ip_address?: string;
   country?: string;
+  country_iso_code?: string;
   region?: string;
+  region_iso_code?: string;
+  subdivision_iso_code?: string;
   city?: string;
+  postal_code?: string;
+  timezone?: string;
+  latitude?: number;
+  longitude?: number;
+  accuracy_radius?: number;
   device_type?: string;
   os_family?: string;
   browser_family?: string;
@@ -93,10 +103,29 @@ interface Scan {
   scan_method?: string;
 }
 
+interface LocationSummary {
+  country?: string | null;
+  country_iso_code?: string | null;
+  region?: string | null;
+  region_iso_code?: string | null;
+  subdivision_iso_code?: string | null;
+  city?: string | null;
+  postal_code?: string | null;
+  timezone?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy_radius?: number | null;
+  scan_count: number;
+  last_scanned_at?: string | null;
+}
+
 interface EnhancedStats {
   total_scans: number;
   daily_scans: ScanData[];
   scans_by_country: Record<string, number>;
+  scans_by_region?: Record<string, number>;
+  scans_by_city?: Record<string, number>;
+  scans_by_postal_code?: Record<string, number>;
   scans_by_device: Record<string, number>;
   scans_by_os: Record<string, number>;
   scans_by_browser: Record<string, number>;
@@ -105,6 +134,7 @@ interface EnhancedStats {
   avg_time_on_page: number;
   scroll_rate: number;
   top_referrers: Record<string, number>;
+  location_summaries?: LocationSummary[];
   scans: Scan[];
 }
 
@@ -160,6 +190,27 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
       month: 'long',
       day: 'numeric',
     });
+  };
+
+  const formatDateTime = (dateString?: string | null): string => {
+    if (!dateString) return 'Unknown';
+    return new Date(dateString).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const formatLocationValue = (value?: string | number | null): string => {
+    if (value === null || value === undefined || value === '') return 'Unknown';
+    return String(value);
+  };
+
+  const formatCoordinate = (value?: number | null): string => {
+    if (value === null || value === undefined) return 'Unknown';
+    return value.toFixed(4);
   };
 
   const fetchQRCode = useCallback(async () => {
@@ -309,6 +360,52 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
       isClosable: true,
     });
   };
+
+  const locationRows = useMemo<LocationSummary[]>(() => {
+    if (enhancedStats?.location_summaries?.length) {
+      return enhancedStats.location_summaries;
+    }
+
+    const summaries = new Map<string, LocationSummary>();
+    (enhancedStats?.scans || []).forEach((scan) => {
+      const key = [
+        scan.country || 'Unknown',
+        scan.region || 'Unknown',
+        scan.city || 'Unknown',
+        scan.postal_code || 'Unknown',
+        scan.timezone || 'Unknown',
+        scan.latitude ?? 'Unknown',
+        scan.longitude ?? 'Unknown',
+        scan.accuracy_radius ?? 'Unknown',
+      ].join('|');
+      const existing = summaries.get(key) || {
+        country: scan.country,
+        country_iso_code: scan.country_iso_code,
+        region: scan.region,
+        region_iso_code: scan.region_iso_code || scan.subdivision_iso_code,
+        subdivision_iso_code: scan.subdivision_iso_code || scan.region_iso_code,
+        city: scan.city,
+        postal_code: scan.postal_code,
+        timezone: scan.timezone,
+        latitude: scan.latitude,
+        longitude: scan.longitude,
+        accuracy_radius: scan.accuracy_radius,
+        scan_count: 0,
+        last_scanned_at: null,
+      };
+
+      existing.scan_count += 1;
+      if (
+        scan.timestamp
+        && (!existing.last_scanned_at || new Date(scan.timestamp) > new Date(existing.last_scanned_at))
+      ) {
+        existing.last_scanned_at = scan.timestamp;
+      }
+      summaries.set(key, existing);
+    });
+
+    return Array.from(summaries.values()).sort((a, b) => b.scan_count - a.scan_count);
+  }, [enhancedStats]);
 
   // Loading state
   if (loading) {
@@ -617,61 +714,75 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
 
           {/* Locations Tab */}
           <TabPanel p={0} pt={6}>
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+            <VStack spacing={6} align="stretch">
+              <Alert status="info" variant="subtle" borderRadius="md">
+                <AlertIcon />
+                <Text>Location is approximate and based on IP geolocation.</Text>
+              </Alert>
               <Card>
                 <CardHeader>
-                  <Heading size="md">Top Locations</Heading>
+                  <Heading size="md">Scan Locations</Heading>
                 </CardHeader>
                 <CardBody>
-                  {enhancedStats?.scans_by_country && Object.keys(enhancedStats.scans_by_country).length > 0 ? (
-                    <Table variant="simple" size="sm">
-                      <Thead>
-                        <Tr>
-                          <Th>Location</Th>
-                          <Th isNumeric>Scans</Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {Object.entries(enhancedStats.scans_by_country)
-                          .sort((a, b) => b[1] - a[1])
-                          .map(([country, count]) => {
-                            // Get all scans for this country
-                            const countryScans = (enhancedStats.scans || []).filter(
-                              (scan: Scan) => scan.country === country
-                            );
-                            
-                            // Group by city, region
-                            const locations = countryScans.reduce((acc: Record<string, number>, scan: Scan) => {
-                              const key = `${scan.city || 'Unknown'}, ${scan.region || 'Unknown'}`;
-                              acc[key] = (acc[key] || 0) + 1;
-                              return acc;
-                            }, {} as Record<string, number>);
-                            
-                            return (
-                              <React.Fragment key={country}>
-                                <Tr bg="gray.50">
-                                  <Td colSpan={2} fontWeight="bold">
-                                    {country || 'Unknown'}
-                                    <Text as="span" ml={2} color="gray.500" fontWeight="normal">
-                                      ({count} scans)
-                                    </Text>
-                                  </Td>
-                                </Tr>
-                                {Object.entries(locations)
-                                  .sort((a, b) => (b[1] as number) - (a[1] as number))
-                                  .map(([location, locationCount]) => (
-                                    <Tr key={`${country}-${location}`}>
-                                      <Td pl={8} fontStyle="italic">
-                                        {location}
-                                      </Td>
-                                      <Td isNumeric>{locationCount as number}</Td>
-                                    </Tr>
-                                  ))}
-                              </React.Fragment>
-                            );
-                          })}
-                      </Tbody>
-                    </Table>
+                  {locationRows.length > 0 ? (
+                    <Box overflowX="auto">
+                      <Table variant="simple" size="sm">
+                        <Thead>
+                          <Tr>
+                            <Th>Country</Th>
+                            <Th>Region</Th>
+                            <Th>City</Th>
+                            <Th>Postal Code</Th>
+                            <Th>Timezone</Th>
+                            <Th>Latitude</Th>
+                            <Th>Longitude</Th>
+                            <Th isNumeric>Accuracy Radius</Th>
+                            <Th isNumeric>Scans</Th>
+                            <Th>Last Scanned</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {locationRows.map((location, index) => (
+                            <Tr key={[
+                              location.country,
+                              location.region,
+                              location.city,
+                              location.postal_code,
+                              index
+                            ].join('-')}>
+                              <Td>
+                                {formatLocationValue(location.country)}
+                                {location.country_iso_code && (
+                                  <Text as="span" color="gray.500" ml={1}>
+                                    ({location.country_iso_code})
+                                  </Text>
+                                )}
+                              </Td>
+                              <Td>
+                                {formatLocationValue(location.region)}
+                                {(location.region_iso_code || location.subdivision_iso_code) && (
+                                  <Text as="span" color="gray.500" ml={1}>
+                                    ({location.region_iso_code || location.subdivision_iso_code})
+                                  </Text>
+                                )}
+                              </Td>
+                              <Td>{formatLocationValue(location.city)}</Td>
+                              <Td>{formatLocationValue(location.postal_code)}</Td>
+                              <Td>{formatLocationValue(location.timezone)}</Td>
+                              <Td>{formatCoordinate(location.latitude)}</Td>
+                              <Td>{formatCoordinate(location.longitude)}</Td>
+                              <Td isNumeric>
+                                {location.accuracy_radius === null || location.accuracy_radius === undefined
+                                  ? 'Unknown'
+                                  : `${location.accuracy_radius} km`}
+                              </Td>
+                              <Td isNumeric>{location.scan_count}</Td>
+                              <Td>{formatDateTime(location.last_scanned_at)}</Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </Box>
                   ) : (
                     <Text color="gray.500">No location data available</Text>
                   )}
@@ -706,7 +817,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                   )}
                 </CardBody>
               </Card>
-            </SimpleGrid>
+            </VStack>
           </TabPanel>
 
           {/* Devices Tab */}

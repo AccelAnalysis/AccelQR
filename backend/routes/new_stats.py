@@ -17,7 +17,15 @@ def quick_qrcode_stats(qrcode_id):
             'timestamp': scan.timestamp.isoformat(),
             'ip_address': scan.ip_address,
             'country': scan.country,
+            'country_iso_code': scan.country_iso_code,
+            'region': scan.region,
+            'region_iso_code': scan.region_iso_code,
             'city': scan.city,
+            'postal_code': scan.postal_code,
+            'timezone': scan.timezone,
+            'latitude': scan.latitude,
+            'longitude': scan.longitude,
+            'accuracy_radius': scan.accuracy_radius,
             'device_type': scan.device_type,
             'scan_method': scan.scan_method,
         }
@@ -37,19 +45,32 @@ def quick_qrcode_stats(qrcode_id):
 @jwt_required()
 def export_all_scans_new():
     scans = db.session.query(
-        Scan.id,
-        Scan.qr_code_id,
+        Scan.id.label('scan_id'),
+        Scan.qr_code_id.label('qr_code_id'),
         QRCode.name.label('qr_name'),
         Scan.timestamp,
         Scan.ip_address,
         Scan.country,
+        Scan.country_iso_code,
+        Scan.region,
+        Scan.region_iso_code,
         Scan.city,
+        Scan.postal_code,
+        Scan.timezone,
+        Scan.latitude,
+        Scan.longitude,
+        Scan.accuracy_radius,
         Scan.device_type,
         Scan.scan_method
     ).join(QRCode, QRCode.id == Scan.qr_code_id).order_by(Scan.timestamp.desc()).all()
 
     def generate():
-        header = ['scan_id', 'qr_code_id', 'qr_name', 'timestamp', 'ip_address', 'country', 'city', 'device_type', 'scan_method']
+        header = [
+            'scan_id', 'qr_code_id', 'qr_name', 'timestamp', 'ip_address',
+            'country', 'country_iso_code', 'region', 'region_iso_code', 'city',
+            'postal_code', 'timezone', 'latitude', 'longitude', 'accuracy_radius',
+            'device_type', 'scan_method'
+        ]
         yield ','.join(header) + '\n'
         for row in scans:
             values = [str(getattr(row, col, '')) if getattr(row, col, '') is not None else '' for col in header]

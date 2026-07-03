@@ -3,9 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   Box, Heading, Spinner, Table, Thead, Tr, Th, Tbody, Td, Button, useToast, Flex, Text
 } from '@chakra-ui/react';
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+import apiClient from '../api/client';
 
 const NewStatsView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,7 +26,7 @@ const NewStatsView: React.FC = () => {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    axios.get(`${API_URL}/newstats/qrcode/${id}/quickstats`)
+    apiClient.get(`/newstats/qrcode/${id}/quickstats`)
       .then(res => setStats(res.data))
       .catch(() => {
         toast({ title: 'Error', description: 'Failed to load stats', status: 'error' });
@@ -38,7 +36,7 @@ const NewStatsView: React.FC = () => {
 
   const handleExport = async () => {
     try {
-      const response = await axios.get(`${API_URL}/newstats/export`, { responseType: 'blob' });
+      const response = await apiClient.get('/newstats/export', { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -47,7 +45,7 @@ const NewStatsView: React.FC = () => {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (error) {
+    } catch {
       toast({ title: 'Export failed', description: 'Could not export stats.', status: 'error' });
     }
   };

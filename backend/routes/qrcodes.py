@@ -9,6 +9,32 @@ bp = Blueprint('qrcodes', __name__, url_prefix='/api/qrcodes')
 
 # No user-specific filtering
 
+def scan_to_dict(scan):
+    return {
+        'id': scan.id,
+        'timestamp': scan.timestamp.isoformat() if scan.timestamp else None,
+        'ip_address': scan.ip_address,
+        'user_agent': scan.user_agent,
+        'country': scan.country,
+        'country_iso_code': scan.country_iso_code,
+        'region': scan.region,
+        'region_iso_code': scan.region_iso_code,
+        'subdivision_iso_code': scan.region_iso_code,
+        'city': scan.city,
+        'postal_code': scan.postal_code,
+        'timezone': scan.timezone,
+        'latitude': scan.latitude,
+        'longitude': scan.longitude,
+        'accuracy_radius': scan.accuracy_radius,
+        'device_type': scan.device_type,
+        'os_family': scan.os_family,
+        'browser_family': scan.browser_family,
+        'referrer_domain': scan.referrer_domain,
+        'time_on_page': scan.time_on_page,
+        'scrolled': scan.scrolled,
+        'scan_method': scan.scan_method
+    }
+
 @bp.route('', methods=['GET'])
 @jwt_required()
 def get_qrcodes():
@@ -46,22 +72,7 @@ def get_qrcode(qrcode_id):
         'target_url': qrcode.target_url,
         'description': qrcode.description,
         'created_at': qrcode.created_at.isoformat(),
-        'scans': [{
-            'id': scan.id,
-            'timestamp': scan.timestamp.isoformat(),
-            'ip_address': scan.ip_address,
-            'user_agent': scan.user_agent,
-            'country': scan.country,
-            'region': scan.region,
-            'city': scan.city,
-            'device_type': scan.device_type,
-            'os_family': scan.os_family,
-            'browser_family': scan.browser_family,
-            'referrer_domain': scan.referrer_domain,
-            'time_on_page': scan.time_on_page,
-            'scrolled': scan.scrolled,
-            'scan_method': scan.scan_method
-        } for scan in qrcode.scans],
+        'scans': [scan_to_dict(scan) for scan in qrcode.scans],
         'short_url': f"{request.host_url}r/{qrcode.short_code}"
     })
 
@@ -109,23 +120,7 @@ def get_qrcode_flexible(identifier):
         scan_dicts = []
         for scan in qrcode.scans:
             try:
-                scan_info = {
-                    'id': scan.id,
-                    'timestamp': scan.timestamp.isoformat() if scan.timestamp else None,
-                    'ip_address': scan.ip_address,
-                    'user_agent': scan.user_agent,
-                    'country': scan.country,
-                    'region': scan.region,
-                    'city': scan.city,
-                    'device_type': scan.device_type,
-                    'os_family': scan.os_family,
-                    'browser_family': scan.browser_family,
-                    'referrer_domain': scan.referrer_domain,
-                    'time_on_page': scan.time_on_page,
-                    'scrolled': scan.scrolled,
-                    'scan_method': scan.scan_method
-                }
-                scan_dicts.append(scan_info)
+                scan_dicts.append(scan_to_dict(scan))
             except Exception as scan_exc:
                 logging.error(f"[flex] Error serializing scan (id={getattr(scan, 'id', None)}): {scan_exc}")
         logging.info(f"[flex] Returning {len(scan_dicts)} scans for QR code id={qrcode.id}")
@@ -189,6 +184,7 @@ def get_qrcode_by_short_code(short_code):
     })
 
 @bp.route('/scans-csv/<short_code>', methods=['GET'])
+@jwt_required()
 def download_scans_csv_by_short_code(short_code):
     import csv
     from io import StringIO
@@ -200,7 +196,9 @@ def download_scans_csv_by_short_code(short_code):
     # Write header
     writer.writerow([
         'id', 'timestamp', 'ip_address', 'user_agent', 'country', 'region', 'city',
-        'device_type', 'os_family', 'browser_family', 'referrer_domain', 'time_on_page', 'scrolled', 'scan_method'
+        'postal_code', 'timezone', 'latitude', 'longitude', 'accuracy_radius',
+        'country_iso_code', 'region_iso_code', 'device_type', 'os_family',
+        'browser_family', 'referrer_domain', 'time_on_page', 'scrolled', 'scan_method'
     ])
     for scan in scans:
         writer.writerow([
@@ -211,6 +209,13 @@ def download_scans_csv_by_short_code(short_code):
             scan.country,
             scan.region,
             scan.city,
+            scan.postal_code,
+            scan.timezone,
+            scan.latitude,
+            scan.longitude,
+            scan.accuracy_radius,
+            scan.country_iso_code,
+            scan.region_iso_code,
             scan.device_type,
             scan.os_family,
             scan.browser_family,
