@@ -230,6 +230,10 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
     }
 
     try {
+      // Retrieve auth token for the request
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
       // Create the folder in the backend
       await apiClient.post('/folders', { name: newFolderName });
       
