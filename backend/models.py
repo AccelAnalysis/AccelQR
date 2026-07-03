@@ -13,6 +13,7 @@ class QRCode(db.Model):
     target_url = db.Column(db.String(500), nullable=False)
     short_code = db.Column(db.String(10), unique=True, nullable=False)
     folder = db.Column(db.String(100))
+    description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
@@ -59,7 +60,6 @@ class User(db.Model):
     def generate_auth_token(self):
         return create_access_token(identity=str(self.id), expires_delta=timedelta(days=1))
     
-    @staticmethod
     @classmethod
     def get_by_email(cls, email):
         return cls.query.filter_by(email=email).first()

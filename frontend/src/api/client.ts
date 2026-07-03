@@ -2,7 +2,7 @@ import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
 // Debug mode - set to false in production
-const DEBUG = true;
+const DEBUG = import.meta.env.DEV;
 
 interface DecodedToken {
   // Standard JWT claims
@@ -14,18 +14,24 @@ interface DecodedToken {
   csrf?: string;   // CSRF token
   type?: string;   // Token type (e.g., 'access' or 'refresh')
   fresh?: boolean; // If the user logged in with credentials
-  [key: string]: any; // Allow other custom claims
+  [key: string]: unknown; // Allow other custom claims
 }
 
 // Helper function to log debug messages
-const debugLog = (...args: any[]) => {
+const debugLog = (...args: unknown[]) => {
   if (DEBUG) {
     console.log('[API Client]', ...args);
   }
 };
 
+const rawApiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const normalizedApiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '');
+const apiBaseUrl = normalizedApiBaseUrl.endsWith('/api')
+  ? normalizedApiBaseUrl
+  : `${normalizedApiBaseUrl}/api`;
+
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5001',
+  baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -123,8 +129,11 @@ apiClient.interceptors.response.use(
 
         // Try to refresh the token
         debugLog('[Auth] Refreshing access token...');
+
+        const refreshUrl = `${apiBaseUrl}/refresh`;
+
         const response = await axios.post(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/auth/refresh`, 
+          refreshUrl,
           {},
           {
             headers: {

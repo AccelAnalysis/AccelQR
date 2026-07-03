@@ -27,11 +27,9 @@ import {
   MenuItem,
   IconButton
  } from '@chakra-ui/react';
-import { FiRefreshCw, FiDownload, FiCode, FiBarChart2, FiTrendingUp, FiMoreHorizontal } from 'react-icons/fi';
+import { FiRefreshCw, FiCode, FiBarChart2, FiTrendingUp, FiMoreHorizontal } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Link as RouterLink } from 'react-router-dom';
-// Added import for the new page
-
 import apiClient from '../api/client';
 import FolderSidebar from '../components/FolderSidebar';
 
@@ -51,6 +49,7 @@ interface QRCode {
   target_url: string;
   created_at: string;
   scan_count: number;
+  last_scanned_at: string | null;
   folder: string | null;
 }
 
@@ -73,7 +72,7 @@ interface DashboardStats {
   time_range: TimeRange;
 }
 
-type SortableField = keyof Pick<QRCode, 'name' | 'short_code' | 'scan_count' | 'created_at' | 'folder'>;
+type SortableField = keyof Pick<QRCode, 'name' | 'short_code' | 'scan_count' | 'created_at' | 'last_scanned_at' | 'folder'>;
 
 // Stat card component
 const StatCard = ({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) => (
@@ -99,7 +98,6 @@ const Dashboard = () => {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<string>('30d');
-  const [newFolderName, setNewFolderName] = useState('');
   const toast = useToast();
   
   // Time range options for the dashboard - memoized to prevent unnecessary re-renders
@@ -242,59 +240,6 @@ const Dashboard = () => {
     ]);
   }, [activeFolder, timeRange, fetchQRCodes, fetchDashboardStats]);
 
-  // Export single QR code (new endpoint)
-  const handleExportNew = useCallback(async (id: number) => {
-    try {
-      const response = await apiClient.get(`${API_URL}/newstats/qrcode/${id}/quickstats`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `qrcode-export-${id}-${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast({ title: 'Export successful', description: 'QR code exported.', status: 'success', duration: 3000, isClosable: true });
-    } catch {
-
-      toast({ title: 'Export failed', description: 'Failed to export QR code.', status: 'error', duration: 5000, isClosable: true });
-    }
-  }, [toast]);
-
-  // Folder-level export (new endpoint)
-  const handleExportFolderNew = useCallback(async (folder: string) => {
-    try {
-      const response = await apiClient.get(`${API_URL}/newstats/export?folder=${encodeURIComponent(folder)}`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `folder-export-${folder}-${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast({ title: 'Export successful', description: `Folder ${folder} exported.`, status: 'success', duration: 3000, isClosable: true });
-    } catch {
-
-      toast({ title: 'Export failed', description: 'Failed to export folder.', status: 'error', duration: 5000, isClosable: true });
-    }
-  }, [toast]);
-
-  // Folder creation (new endpoint)
-  const handleCreateFolderNew = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!newFolderName.trim()) return;
-    try {
-      await apiClient.post(`${API_URL}/newstats/folders`, { name: newFolderName });
-      toast({ title: 'Folder created', description: `Folder "${newFolderName}" created.`, status: 'success', duration: 3000, isClosable: true });
-      setNewFolderName('');
-      refreshData();
-    } catch {
-
-      toast({ title: 'Error', description: 'Could not create folder.', status: 'error', duration: 5000, isClosable: true });
-    }
-  }, [newFolderName, toast, refreshData]);
-  
   // Sort configuration state
   const [sortConfig, setSortConfig] = useState<{
     key: SortableField;
@@ -340,7 +285,7 @@ const Dashboard = () => {
       if (bValue === null || bValue === undefined) return sortConfig.direction === 'ascending' ? 1 : -1;
 
       // Convert dates to timestamps for comparison
-      if (sortConfig.key === 'created_at') {
+      if (sortConfig.key === 'created_at' || sortConfig.key === 'last_scanned_at') {
         aValue = new Date(aValue as string).getTime();
         bValue = new Date(bValue as string).getTime();
       }
@@ -404,6 +349,13 @@ const Dashboard = () => {
             </Th>
             <Th 
               cursor="pointer" 
+              onClick={() => requestSort('last_scanned_at')}
+              _hover={{ bg: 'gray.100' }}
+            >
+              Last Scanned {getSortIndicator('last_scanned_at')}
+            </Th>
+            <Th 
+              cursor="pointer" 
               onClick={() => requestSort('created_at')}
               _hover={{ bg: 'gray.100' }}
             >
@@ -433,6 +385,7 @@ const Dashboard = () => {
                 <code>{qr.short_code}</code>
               </Td>
               <Td isNumeric>{formatNumber(qr.scan_count)}</Td>
+              <Td>{qr.last_scanned_at ? formatDate(qr.last_scanned_at) : '-'}</Td>
               <Td>{formatDate(qr.created_at)}</Td>
               <Td>
                 {qr.folder ? (
@@ -452,9 +405,6 @@ const Dashboard = () => {
                   />
                   <MenuList>
                     <MenuItem as={RouterLink} to={`/qrcodes/${qr.id}`}>View Stats</MenuItem>
-                    <MenuItem as={RouterLink} to={`/newstats/${qr.id}`}>New Stats View</MenuItem>
-                    <MenuItem onClick={() => handleExportNew(qr.id)} icon={<FiDownload />}>Export (New)</MenuItem>
-                    <MenuItem onClick={() => handleExportFolderNew(qr.folder || '')} icon={<FiDownload />}>Export Folder (New)</MenuItem>
                   </MenuList>
                 </Menu>
               </Td>
@@ -463,7 +413,7 @@ const Dashboard = () => {
         </Tbody>
       </Table>
     );
-  }, [loading, sortedQRCodes, activeFolder, requestSort, getSortIndicator, formatNumber, formatDate, handleExportNew, handleExportFolderNew]);
+  }, [loading, sortedQRCodes, activeFolder, requestSort, getSortIndicator, formatNumber, formatDate]);
 
   // Dashboard stats component
   const DashboardStatsCard = useMemo(() => {
@@ -541,10 +491,10 @@ const Dashboard = () => {
   
   // Main render
   return (
-    <Box p={6}>
-      <Flex justify="space-between" align="center" mb={6}>
+    <Box p={{ base: 4, md: 6 }}>
+      <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={6} direction={{ base: 'column', md: 'row' }} gap={4}>
         <Heading size="lg">Dashboard</Heading>
-        <HStack spacing={4} mb={4}>
+        <HStack spacing={4}>
           <Button 
             leftIcon={<FiRefreshCw />} 
             onClick={refreshData}
@@ -554,24 +504,12 @@ const Dashboard = () => {
             Refresh
           </Button>
         </HStack>
-      {/* New Folder Creation UI */}
-      <Box mb={4}>
-        <form onSubmit={handleCreateFolderNew} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input
-            placeholder="New Folder Name"
-            value={newFolderName}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewFolderName(e.target.value)}
-            style={{ padding: 4, borderRadius: 4, border: '1px solid #CBD5E0', fontSize: 14 }}
-          />
-          <Button type="submit" size="sm" colorScheme="teal">Create Folder (New)</Button>
-        </form>
-      </Box>
 
       </Flex>
       
-      <Flex>
+      <Flex direction={{ base: 'column', md: 'row' }} w="100%" minW={0}>
         {/* Sidebar */}
-        <Box width="250px" mr={6}>
+        <Box width={{ base: '100%', md: '250px' }} mr={{ base: 0, md: 6 }} mb={{ base: 4, md: 0 }} minW={0}>
           <FolderSidebar 
             activeFolder={activeFolder}
             onSelectFolder={handleFolderSelect}
@@ -579,13 +517,13 @@ const Dashboard = () => {
         </Box>
         
         {/* Main content */}
-        <Box flex={1}>
+        <Box flex={1} minW={0} w="100%">
           {DashboardStatsCard}
-          <Card>
+          <Card w="100%">
             <CardHeader>
               <Heading size="md">QR Codes</Heading>
             </CardHeader>
-            <CardBody>
+            <CardBody overflowX="auto">
               {QRCodeTable}
             </CardBody>
           </Card>
@@ -596,4 +534,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

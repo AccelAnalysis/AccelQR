@@ -30,15 +30,14 @@ import {
   FiCheck,
   FiX
 } from 'react-icons/fi'; // Changed FiXCircle to FiX
-import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { AxiosError } from 'axios';
+import apiClient from '../api/client';
 
 interface FolderSidebarProps {
   activeFolder: string | null;
   onSelectFolder: (folder: string | null) => void;
 }
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 interface FolderItemProps {
   name: string;
@@ -196,16 +195,13 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
   const [newFolderName, setNewFolderName] = useState('');
   const toast = useToast();
 
-  const fetchFolders = async () => {
+  const fetchFolders = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/folders`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      });
+      const response = await apiClient.get('/folders');
       // Filter out any null or empty folder names
       const validFolders = response.data.filter((folder: string | null) => folder && folder.trim() !== '');
       setFolders(validFolders);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error fetching folders:', error);
       toast({
         title: 'Error',
@@ -215,11 +211,11 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
         isClosable: true,
       });
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchFolders();
-  }, []);
+  }, [fetchFolders]);
 
   const handleAddFolder = async () => {
     if (!newFolderName.trim()) {
@@ -239,7 +235,7 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
       // Create the folder in the backend
-      await axios.post(`${API_URL}/folders`, { name: newFolderName }, { headers });
+      await apiClient.post('/folders', { name: newFolderName });
       
       // Refresh the folders list from the server
       await fetchFolders();
@@ -254,9 +250,11 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
         duration: 3000,
         isClosable: true,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating folder:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to create folder';
+      const axiosError = error as AxiosError;
+      const data = axiosError.response?.data as { error?: string } | undefined;
+      const errorMessage = data?.error || 'Failed to create folder';
       toast({
         title: 'Error',
         description: errorMessage,
@@ -284,9 +282,7 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      await axios.put(`${API_URL}/folders/${encodeURIComponent(oldName)}`, { name: newName }, { headers });
+      await apiClient.put(`/folders/${encodeURIComponent(oldName)}`, { name: newName });
       await fetchFolders();
       
       // If the renamed folder was active, update the active folder
@@ -302,9 +298,11 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
         isClosable: true,
       });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error renaming folder:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to rename folder';
+      const axiosError = error as AxiosError;
+      const data = axiosError.response?.data as { error?: string } | undefined;
+      const errorMessage = data?.error || 'Failed to rename folder';
       toast({
         title: 'Error',
         description: errorMessage,
@@ -318,9 +316,7 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
 
   const handleDeleteFolder = async (folderName: string): Promise<boolean> => {
     try {
-      const token = localStorage.getItem('token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      await axios.delete(`${API_URL}/folders/${encodeURIComponent(folderName)}`, { headers });
+      await apiClient.delete(`/folders/${encodeURIComponent(folderName)}`);
       await fetchFolders();
       
       // If the deleted folder was active, reset to all folders view
@@ -336,9 +332,11 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
         isClosable: true,
       });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting folder:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to delete folder';
+      const axiosError = error as AxiosError;
+      const data = axiosError.response?.data as { error?: string } | undefined;
+      const errorMessage = data?.error || 'Failed to delete folder';
       toast({
         title: 'Error',
         description: errorMessage,

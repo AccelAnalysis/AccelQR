@@ -50,6 +50,7 @@ import { FiArrowLeft, FiCopy, FiDownload, FiEdit2, FiExternalLink, FiTrash2, FiG
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
 import apiClient from '../api/client';
+import { getShortUrl } from '../utils/shortUrl';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -328,6 +329,8 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
     );
   }
 
+  const shortUrl = getShortUrl(qrCode.short_code, qrCode.short_url);
+
   return (
     <Box minH="100vh" p={{ base: 4, md: 6 }}>
       <Box maxW="1400px" mx="auto" h="100%">
@@ -418,7 +421,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                   leftIcon={<FiDownload />}
                   onClick={() => {
                     const link = document.createElement('a');
-                    link.href = `${API_URL}/qrcodes/${qrCode.short_code}/image`;
+                    link.href = `${API_URL}/qrcodes/image-by-shortcode/${qrCode.short_code}`;
                     link.download = `qrcode-${qrCode.short_code}.png`;
                     link.click();
                   }}
@@ -427,7 +430,7 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                 </Button>
                 <Button
                   leftIcon={<FiCopy />}
-                  onClick={() => copyToClipboard(`${window.location.origin}/r/${qrCode.short_code}`)}
+                  onClick={() => copyToClipboard(shortUrl)}
                 >
                   Copy Link
                 </Button>
@@ -503,13 +506,13 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                     <StatNumber fontSize="lg">{qrCode.short_code}</StatNumber>
                     <StatHelpText>
                       <HStack>
-                        <Text>{`${window.location.origin}/r/${qrCode.short_code}`}</Text>
+                        <Text>{shortUrl}</Text>
                         <IconButton
                           icon={<FiCopy size={14} />}
                           aria-label="Copy URL"
                           size="xs"
                           variant="ghost"
-                          onClick={() => copyToClipboard(`${window.location.origin}/r/${qrCode.short_code}`)}
+                          onClick={() => copyToClipboard(shortUrl)}
                         />
                       </HStack>
                     </StatHelpText>

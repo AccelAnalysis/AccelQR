@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 const Register: React.FC = () => {
+  const allowRegistration = import.meta.env.DEV;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -38,10 +39,11 @@ const Register: React.FC = () => {
         isClosable: true,
       });
       navigate('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { msg?: string } } };
       toast({
         title: 'Registration failed',
-        description: error.response?.data?.msg || 'An error occurred',
+        description: err.response?.data?.msg || 'An error occurred',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -54,10 +56,22 @@ const Register: React.FC = () => {
   return (
     <Container maxW="container.sm" py={10}>
       <Box p={8} borderWidth={1} borderRadius={8} boxShadow="lg">
-        <VStack spacing={6} as="form" onSubmit={handleSubmit}>
+        <VStack spacing={6} as={allowRegistration ? "form" : "div"} onSubmit={allowRegistration ? handleSubmit : undefined}>
           <Heading as="h1" size="lg" mb={6}>
             Create an Account
           </Heading>
+
+          {!allowRegistration && (
+            <>
+              <Text>Registration is disabled.</Text>
+              <ChakraLink as={Link} to="/login" color="blue.500">
+                Go to login
+              </ChakraLink>
+            </>
+          )}
+
+          {allowRegistration && (
+            <>
           
           <FormControl id="email" isRequired>
             <FormLabel>Email address</FormLabel>
@@ -105,6 +119,8 @@ const Register: React.FC = () => {
               Log in
             </ChakraLink>
           </Text>
+            </>
+          )}
         </VStack>
       </Box>
     </Container>

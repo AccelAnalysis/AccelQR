@@ -4,21 +4,40 @@ from extensions import db as ext_db
 import os
 import sys
 from sqlalchemy.exc import SQLAlchemyError
+from flask_migrate import upgrade, stamp
+from sqlalchemy import inspect
 
 def init_db():
     try:
         app = create_app()
         with app.app_context():
+            migrations_dir = os.path.join(os.path.dirname(__file__), 'migrations')
+
             print("Initializing database...")
-            
-            # Create all tables
-            print("Creating database tables...")
-            ext_db.create_all()
-            print("✓ Database tables created")
-            
+
+            inspector = inspect(db.engine)
+            tables = inspector.get_table_names()
+            if 'alembic_version' in tables:
+                # When Alembic is in use, rely on migrations to evolve schema.
+                print("Applying database migrations...")
+                upgrade(directory=migrations_dir)
+                print("✓ Database migrations applied successfully!")
+            else:
+                # Legacy bootstrap: create schema from models, then mark migrations as applied.
+                print("Creating database tables...")
+                ext_db.create_all()
+                print("✓ Database tables created")
+                stamp(directory=migrations_dir, revision='head')
+
             # Get admin credentials from environment variables
             admin_email = os.getenv('ADMIN_EMAIL', 'admin@example.com')
-            admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
+            flask_env = os.getenv('FLASK_ENV', '').lower()
+            is_production = flask_env == 'production' or (not flask_env and os.getenv('RENDER') is not None)
+            admin_password = os.getenv('ADMIN_PASSWORD')
+            if not admin_password:
+                if is_production:
+                    raise RuntimeError("ADMIN_PASSWORD must be set in production")
+                admin_password = 'admin123'
             
             # Check if admin user exists
             admin = User.query.filter_by(email=admin_email).first()
@@ -49,7 +68,6 @@ def init_db():
             
             # Verify database schema
             print("\nVerifying database schema...")
-            from sqlalchemy import inspect
             inspector = inspect(db.engine)
             tables = inspector.get_table_names()
             print(f"Found {len(tables)} tables: {', '.join(tables)}")

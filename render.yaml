@@ -20,10 +20,12 @@ services:
           property: connectionString
       - key: JWT_SECRET_KEY
         generateValue: true
+      - key: SECRET_KEY
+        generateValue: true
       - key: ADMIN_EMAIL
         value: jholman@accelanalysis.com
       - key: ADMIN_PASSWORD
-        value: Missions1!
+        generateValue: true
       - key: PYTHONUNBUFFERED
         value: 1
       - key: PYTHONPATH

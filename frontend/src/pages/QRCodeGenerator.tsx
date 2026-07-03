@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FiCopy, FiExternalLink, FiDownload } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -20,14 +21,8 @@ import {
   FormHelperText,
 } from '@chakra-ui/react';
 import apiClient from '../api/client';
-import { ENDPOINTS, API_URL } from '../config';
-
-const getBaseUrl = () => {
-  // Extract the base URL from API_URL (remove /api suffix if present)
-  const apiUrl = API_URL.replace('/api', '');
-  // Ensure it doesn't end with a slash
-  return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
-};
+import { ENDPOINTS } from '../config';
+import { getShortUrl } from '../utils/shortUrl';
 
 const QRCodeGenerator = () => {
   const [formData, setFormData] = useState({
@@ -45,16 +40,15 @@ const QRCodeGenerator = () => {
     id: number;
     short_code: string;
     image_url: string;
+    short_url?: string;
   } | null>(null);
   
   const toast = useToast();
+  const navigate = useNavigate();
 
   const fetchFolders = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await apiClient.get(`${API_URL}/folders`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      });
+      const response = await apiClient.get(ENDPOINTS.FOLDERS);
       setFolders(response.data);
       setIsLoadingFolders(false);
     } catch (error) {
@@ -113,22 +107,24 @@ const QRCodeGenerator = () => {
       const qrData = {
         id: response.data.id,
         short_code: response.data.short_code,
-        image_url: response.data.image_url
+        image_url: response.data.image_url,
+        short_url: response.data.short_url
       };
       setGeneratedQR(qrData);
+      const shortUrl = getShortUrl(response.data.short_code, response.data.short_url);
       
       // Set QR code image URL
       if (response.data.image_url) {
         setQrCodeImage(
           response.data.image_url.startsWith('http')
             ? response.data.image_url
-            : `${getBaseUrl()}${response.data.image_url}`
+            : response.data.image_url
         );
       } else {
         // Fallback to QR code generation API
         setQrCodeImage(
           `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-            `${getBaseUrl()}/r/${response.data.short_code}`
+            shortUrl
           )}`
         );
       }
@@ -294,13 +290,13 @@ const QRCodeGenerator = () => {
                     maxW="100%"
                     overflowX="auto"
                   >
-                    {getBaseUrl()}/r/{generatedQR.short_code}
+                    {getShortUrl(generatedQR.short_code, generatedQR.short_url)}
                   </Box>
                   <HStack spacing={4} mt={4} justify="center" flexWrap="wrap">
                     <Button
                       onClick={() => {
                         navigator.clipboard.writeText(
-                          `${getBaseUrl()}/r/${generatedQR.short_code}`
+                          getShortUrl(generatedQR.short_code, generatedQR.short_url)
                         );
                         toast({
                           title: 'Copied!',
@@ -317,9 +313,7 @@ const QRCodeGenerator = () => {
                     </Button>
                     <Button
                       colorScheme="blue"
-                      onClick={() => {
-                        window.open(`${getBaseUrl()}/dashboard/qrcodes/${generatedQR.id}`, '_blank');
-                      }}
+                      onClick={() => navigate(`/qrcodes/${generatedQR.id}`)}
                       size={{ base: 'md', md: 'lg' }}
                       px={6}
                       rightIcon={<FiExternalLink />}

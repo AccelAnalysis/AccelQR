@@ -12,6 +12,31 @@ import os
 
 bp = Blueprint('auth', __name__)
 
+def _is_production_env() -> bool:
+    flask_env = os.getenv('FLASK_ENV', '').lower()
+    return flask_env == 'production' or (not flask_env and os.getenv('RENDER') is not None)
+
+@bp.route('/register', methods=['POST'])
+def register():
+    if _is_production_env():
+        return jsonify({"msg": "Not found"}), 404
+
+    data = request.get_json() or {}
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({"msg": "Email and password are required"}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({"msg": "Email already registered"}), 400
+
+    user = User(email=email, is_admin=not User.query.first())
+    user.set_password(password)
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({"msg": "User created successfully"}), 201
+
 @bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -21,20 +46,26 @@ def login():
     if not email or not password:
         return jsonify({"msg": "Email and password are required"}), 400
     
-    # Check if admin user exists, if not create one
+    # Ensure admin user exists on first login attempt
     admin_email = os.getenv('ADMIN_EMAIL', 'admin@example.com')
-    admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
-    
-    user = User.query.filter_by(email=admin_email).first()
-    
-    if not user:
+    admin_password = os.getenv('ADMIN_PASSWORD')
+
+    admin_user = User.query.filter_by(email=admin_email).first()
+    if not admin_user:
+        if not admin_password:
+            if _is_production_env():
+                return jsonify({"msg": "Server not configured"}), 500
+            admin_password = 'admin123'
         # Create admin user if not exists
-        user = User(email=admin_email, is_admin=True)
-        user.set_password(admin_password)
-        db.session.add(user)
+        admin_user = User(email=admin_email, is_admin=True)
+        admin_user.set_password(admin_password)
+        db.session.add(admin_user)
         db.session.commit()
     
-    if not user.check_password(password):
+    # Query for the user attempting to log in
+    user = User.query.filter_by(email=email).first()
+    
+    if not user or not user.check_password(password):
         return jsonify({"msg": "Invalid email or password"}), 401
     
     # Create tokens

@@ -14,8 +14,9 @@ from io import BytesIO
 import base64
 import uuid
 import geoip2.database
+import geoip2.errors
 from user_agents import parse
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, func
 from functools import wraps
 
 # Configure logging
@@ -34,6 +35,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+GEOLITE_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'GeoLite2-City.mmdb')
+
 # Database and JWT are now initialized in extensions.py
 from flask_migrate import Migrate
 
@@ -46,8 +49,30 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def lookup_scan_location(ip_address):
+    if not ip_address or not os.path.exists(GEOLITE_DB_PATH):
+        return {}
+
+    try:
+        with geoip2.database.Reader(GEOLITE_DB_PATH) as reader:
+            response = reader.city(ip_address)
+            return {
+                'country': response.country.name,
+                'region': response.subdivisions.most_specific.name,
+                'city': response.city.name,
+                'timezone': response.location.time_zone
+            }
+    except (ValueError, geoip2.errors.AddressNotFoundError):
+        return {}
+    except Exception:
+        logger.exception("Failed to look up GeoIP location for scan")
+        return {}
+
 def create_app():
     """Create and configure the Flask application."""
+    # Load environment variables from .env file
+    load_dotenv()
+
     # Create the app
     app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
 
@@ -55,14 +80,15 @@ def create_app():
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
-    # Debug: Print JWT secret key at startup
-    print("[DEBUG] JWT_SECRET_KEY:", os.environ.get("JWT_SECRET_KEY"))
-    logging.info(f"[DEBUG] JWT_SECRET_KEY: {os.environ.get('JWT_SECRET_KEY')}")
-    
-    # Debug: Log Authorization header for every request
-    @app.before_request
-    def log_auth_header():
-        logging.info(f"Authorization header: {request.headers.get('Authorization')}")
+    flask_env = os.getenv('FLASK_ENV', '').lower()
+    is_production = flask_env == 'production' or (not flask_env and os.getenv('RENDER') is not None)
+
+    if not is_production:
+        @app.before_request
+        def log_auth_header():
+            auth_header = request.headers.get('Authorization')
+            if auth_header:
+                logging.info("Authorization header present")
 
     # Configure database
     db_uri = os.getenv('DATABASE_URL')
@@ -70,7 +96,8 @@ def create_app():
         raise ValueError("No DATABASE_URL environment variable set. Please configure your database.")
     if db_uri.startswith('postgres://'):
         db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
-    print(f"[Startup] Using DATABASE_URL: {db_uri}")  # Added for debugging
+    if not is_production:
+        print("[Startup] DATABASE_URL configured")
 
     app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 
@@ -105,8 +132,12 @@ def create_app():
         )
     
     # Configure session and JWT
-    app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')
+    secret_key = os.getenv('SECRET_KEY')
+    jwt_secret_key = os.getenv('JWT_SECRET_KEY')
+    if is_production and (not secret_key or not jwt_secret_key):
+        raise ValueError("Missing SECRET_KEY and/or JWT_SECRET_KEY in production")
+    app.secret_key = secret_key or 'your-secret-key-here'
+    app.config['JWT_SECRET_KEY'] = jwt_secret_key or 'your-jwt-secret-key'
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
     app.permanent_session_lifetime = timedelta(days=1)
     # Explicitly disable CSRF protection for Bearer tokens
@@ -167,18 +198,22 @@ def create_app():
             box_size=10,
             border=4,
         )
-        qr.add_data(data['target_url'])
+        qr.add_data(f"{request.host_url}r/{short_code}")
         qr.make(fit=True)
         
         # Generate QR code image
         img = qr.make_image(fill_color="black", back_color="white")
         
         # Save QR code to database
+        current_user_id = get_jwt_identity()
+        if current_user_id is not None:
+            current_user_id = int(current_user_id)
         qr_code = QRCode(
             name=data.get('name', 'Untitled'),
             target_url=data['target_url'],
             short_code=short_code,
-            folder=data.get('folder')
+            folder=data.get('folder'),
+            user_id=current_user_id
         )
         
         db.session.add(qr_code)
@@ -217,11 +252,16 @@ def create_app():
         # Log the scan
         if request.remote_addr != '127.0.0.1':  # Don't log localhost scans
             user_agent = parse(request.user_agent.string)
+            location = lookup_scan_location(request.remote_addr)
             
             scan = Scan(
                 qr_code_id=qr_code.id,
                 ip_address=request.remote_addr,
                 user_agent=request.user_agent.string,
+                country=location.get('country'),
+                region=location.get('region'),
+                city=location.get('city'),
+                timezone=location.get('timezone'),
                 device_type=user_agent.device.family,
                 os_family=user_agent.os.family,
                 browser_family=user_agent.browser.family,
@@ -237,8 +277,17 @@ def create_app():
     @app.route('/api/qrcodes', methods=['GET'])
     @jwt_required()
     def get_qrcodes():
-        qrcodes = QRCode.query.all()
-        
+        rows = (
+            db.session.query(
+                QRCode,
+                func.count(Scan.id).label('scan_count'),
+                func.max(Scan.timestamp).label('last_scanned_at'),
+            )
+            .outerjoin(Scan, Scan.qr_code_id == QRCode.id)
+            .group_by(QRCode.id)
+            .all()
+        )
+
         return jsonify([{
             'id': qr.id,
             'name': qr.name,
@@ -246,9 +295,10 @@ def create_app():
             'short_code': qr.short_code,
             'folder': qr.folder,
             'created_at': qr.created_at.isoformat(),
-            'scan_count': len(qr.scans),
+            'scan_count': int(scan_count or 0),
+            'last_scanned_at': last_scanned_at.isoformat() if last_scanned_at else None,
             'short_url': f"{request.host_url}r/{qr.short_code}"
-        } for qr in qrcodes])
+        } for qr, scan_count, last_scanned_at in rows])
     
     # Add QR code detail endpoint
     @app.route('/api/qrcodes/<int:qrcode_id>', methods=['GET'])
