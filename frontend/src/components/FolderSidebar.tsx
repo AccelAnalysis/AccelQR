@@ -3,6 +3,7 @@ import {
   VStack, 
   HStack, 
   Text, 
+  Badge,
   Button, 
   Input, 
   useToast, 
@@ -37,6 +38,8 @@ import apiClient from '../api/client';
 interface FolderSidebarProps {
   activeFolder: string | null;
   onSelectFolder: (folder: string | null) => void;
+  totalCount?: number;
+  folderCounts?: Record<string, number>;
 }
 
 interface FolderItemProps {
@@ -45,9 +48,10 @@ interface FolderItemProps {
   onSelect: () => void;
   onRename: (newName: string) => Promise<boolean>;
   onDelete: () => Promise<boolean>;
+  count?: number;
 }
 
-const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRename, onDelete }) => {
+const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRename, onDelete, count }) => {
   const deleteDialog = useDisclosure();
   const [isRenaming, setIsRenaming] = useState(false);
   const [editedName, setEditedName] = useState(name);
@@ -126,6 +130,9 @@ const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRen
         ) : (
           <>
             <Text flex={1} isTruncated>{name}</Text>
+            {count !== undefined && (
+              <Badge colorScheme={isActive ? 'blue' : 'gray'}>{count}</Badge>
+            )}
             <Menu isLazy>
               <MenuButton
                 as={IconButton}
@@ -189,10 +196,11 @@ const FolderItem: React.FC<FolderItemProps> = ({ name, isActive, onSelect, onRen
   );
 };
 
-const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => {
+const FolderSidebar = ({ activeFolder, onSelectFolder, totalCount, folderCounts = {} }: FolderSidebarProps) => {
   const [folders, setFolders] = useState<string[]>([]);
   const [isAddingFolder, setIsAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [isFolderPanelOpen, setIsFolderPanelOpen] = useState(false);
   const toast = useToast();
 
   const fetchFolders = useCallback(async () => {
@@ -344,8 +352,7 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
     }
   };
 
-  return (
-    <Box w="250px" borderRight="1px" borderColor="gray.200" p={4} bg="white" h="100vh" position="sticky" top={0} zIndex="sticky">
+  const folderContent = (
       <VStack align="stretch" spacing={4}>
         <HStack justify="space-between" mb={4}>
           <Text fontSize="lg" fontWeight="bold">Folders</Text>
@@ -388,7 +395,10 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
           >
             <HStack>
               <FiFolder />
-              <Text>All QR Codes</Text>
+              <Text flex={1}>All QR Codes</Text>
+              {totalCount !== undefined && (
+                <Badge colorScheme={!activeFolder ? 'blue' : 'gray'}>{totalCount}</Badge>
+              )}
             </HStack>
           </Box>
           
@@ -400,10 +410,41 @@ const FolderSidebar = ({ activeFolder, onSelectFolder }: FolderSidebarProps) => 
               onSelect={() => onSelectFolder(folder)}
               onRename={async (newName) => await handleRenameFolder(folder, newName)}
               onDelete={async () => await handleDeleteFolder(folder)}
+              count={folderCounts[folder] || 0}
             />
           ))}
         </VStack>
       </VStack>
+  );
+
+  return (
+    <Box w="100%">
+      <Button
+        display={{ base: 'flex', lg: 'none' }}
+        w="100%"
+        mb={3}
+        variant="outline"
+        leftIcon={<FiFolder />}
+        onClick={() => setIsFolderPanelOpen((open) => !open)}
+      >
+        {isFolderPanelOpen ? 'Hide folders' : 'Show folders'}
+      </Button>
+      <Box
+        display={{ base: isFolderPanelOpen ? 'block' : 'none', lg: 'block' }}
+        w={{ base: '100%', lg: '250px' }}
+        borderRight={{ base: 0, lg: '1px' }}
+        borderColor="gray.200"
+        borderWidth={{ base: '1px', lg: 0 }}
+        borderRadius={{ base: 'md', lg: 0 }}
+        p={4}
+        bg="white"
+        h={{ base: 'auto', lg: '100vh' }}
+        position={{ base: 'static', lg: 'sticky' }}
+        top={0}
+        zIndex="sticky"
+      >
+        {folderContent}
+      </Box>
     </Box>
   );
 };
