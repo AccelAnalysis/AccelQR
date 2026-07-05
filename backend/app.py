@@ -3,7 +3,7 @@ from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_jwt_extended import jwt_required, create_access_token, get_jwt_identity
 from extensions import db, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from models import QRCode, Scan
 import os
 import logging
@@ -18,6 +18,7 @@ import geoip2.errors
 from user_agents import parse
 from sqlalchemy import text, inspect, func
 from functools import wraps
+import ipaddress
 
 # Configure logging
 log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
@@ -67,6 +68,44 @@ def lookup_scan_location(ip_address):
     except Exception:
         logger.exception("Failed to look up GeoIP location for scan")
         return {}
+
+
+def serialize_utc(dt):
+    """Serialize database datetimes as explicit UTC ISO 8601 strings."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def is_public_ip(ip_address):
+    try:
+        parsed_ip = ipaddress.ip_address(ip_address)
+    except ValueError:
+        return False
+    return not (
+        parsed_ip.is_private
+        or parsed_ip.is_loopback
+        or parsed_ip.is_link_local
+        or parsed_ip.is_reserved
+        or parsed_ip.is_multicast
+        or parsed_ip.is_unspecified
+    )
+
+
+def get_scan_client_ip():
+    forwarded_for = request.headers.get('X-Forwarded-For', '')
+    candidates = [ip.strip() for ip in forwarded_for.split(',') if ip.strip()]
+    candidates.extend(request.access_route or [])
+
+    for candidate in candidates:
+        if is_public_ip(candidate):
+            return candidate
+
+    return request.remote_addr
 
 def create_app():
     """Create and configure the Flask application."""
@@ -239,7 +278,7 @@ def create_app():
             "short_code": qr_code.short_code,
             "target_url": qr_code.target_url,
             "folder": qr_code.folder,
-            "created_at": qr_code.created_at.isoformat(),
+            "created_at": serialize_utc(qr_code.created_at),
             "qr_code_image": f"data:image/png;base64,{img_str}",
             "short_url": f"{request.host_url}r/{short_code}"
         }), 201
@@ -250,13 +289,14 @@ def create_app():
         qr_code = QRCode.query.filter_by(short_code=short_code).first_or_404()
         
         # Log the scan
-        if request.remote_addr != '127.0.0.1':  # Don't log localhost scans
+        client_ip = get_scan_client_ip()
+        if client_ip not in ('127.0.0.1', '::1'):  # Don't log localhost scans
             user_agent = parse(request.user_agent.string)
-            location = lookup_scan_location(request.remote_addr)
+            location = lookup_scan_location(client_ip)
             
             scan = Scan(
                 qr_code_id=qr_code.id,
-                ip_address=request.remote_addr,
+                ip_address=client_ip,
                 user_agent=request.user_agent.string,
                 country=location.get('country'),
                 region=location.get('region'),
@@ -294,9 +334,9 @@ def create_app():
             'target_url': qr.target_url,
             'short_code': qr.short_code,
             'folder': qr.folder,
-            'created_at': qr.created_at.isoformat(),
+            'created_at': serialize_utc(qr.created_at),
             'scan_count': int(scan_count or 0),
-            'last_scanned_at': last_scanned_at.isoformat() if last_scanned_at else None,
+            'last_scanned_at': serialize_utc(last_scanned_at) if last_scanned_at else None,
             'short_url': f"{request.host_url}r/{qr.short_code}"
         } for qr, scan_count, last_scanned_at in rows])
     
@@ -312,10 +352,10 @@ def create_app():
             'target_url': qr.target_url,
             'short_code': qr.short_code,
             'folder': qr.folder,
-            'created_at': qr.created_at.isoformat(),
+            'created_at': serialize_utc(qr.created_at),
             'scans': [{
                 'id': scan.id,
-                'timestamp': scan.timestamp.isoformat(),
+                'timestamp': serialize_utc(scan.timestamp),
                 'ip_address': scan.ip_address,
                 'device_type': scan.device_type,
                 'os_family': scan.os_family,

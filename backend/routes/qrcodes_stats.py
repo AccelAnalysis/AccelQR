@@ -2,9 +2,21 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from models import db, QRCode, Scan
 from sqlalchemy import func
-from datetime import datetime
+from datetime import timezone
 
 bp = Blueprint('qrcodes_stats', __name__, url_prefix='/api/qrcodes')
+
+
+def serialize_utc(dt):
+    """Serialize database datetimes as explicit UTC ISO 8601 strings."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
+
 
 @bp.route('/<int:qrcode_id>/stats', methods=['GET'])
 @jwt_required()
@@ -12,7 +24,7 @@ def qrcode_stats(qrcode_id):
     qrcode = QRCode.query.get_or_404(qrcode_id)
     total_scans = db.session.query(func.count(Scan.id)).filter(Scan.qr_code_id == qrcode_id).scalar() or 0
     last_scan = db.session.query(Scan).filter(Scan.qr_code_id == qrcode_id).order_by(Scan.timestamp.desc()).first()
-    last_scan_time = last_scan.timestamp.isoformat() if last_scan else None
+    last_scan_time = serialize_utc(last_scan.timestamp) if last_scan else None
     unique_cities = db.session.query(func.count(func.distinct(Scan.city))).filter(Scan.qr_code_id == qrcode_id).scalar() or 0
     unique_countries = db.session.query(func.count(func.distinct(Scan.country))).filter(Scan.qr_code_id == qrcode_id).scalar() or 0
     return jsonify({
@@ -63,7 +75,7 @@ def qrcode_enhanced_stats(qrcode_id):
         # Raw scan data
         scan_list.append({
             'id': scan.id,
-            'timestamp': scan.timestamp.isoformat() if scan.timestamp else None,
+            'timestamp': serialize_utc(scan.timestamp),
             'ip_address': scan.ip_address,
             'user_agent': scan.user_agent,
             'country': scan.country,

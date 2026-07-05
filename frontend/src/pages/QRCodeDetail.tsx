@@ -157,16 +157,19 @@ const getAppBaseUrl = (): string => API_URL.replace(/\/api\/?$/, '').replace(/\/
 
 const getShortUrl = (shortCode: string): string => `${getAppBaseUrl()}/r/${shortCode}`;
 
-const parseScanDate = (scan: Scan): Date | null => {
-  if (!scan.timestamp) return null;
-  const date = new Date(scan.timestamp);
+const parseBackendDate = (dateString?: string | null): Date | null => {
+  if (!dateString) return null;
+  const hasTimezone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(dateString);
+  const normalized = hasTimezone ? dateString : `${dateString}Z`;
+  const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const parseScanDate = (scan: Scan): Date | null => parseBackendDate(scan.timestamp);
+
 const formatDateTime = (dateString?: string | null): string => {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return 'N/A';
+  const date = parseBackendDate(dateString);
+  if (!date) return 'N/A';
   return date.toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',
@@ -898,9 +901,13 @@ const QRCodeDetail: React.FC = (): React.ReactElement => {
                 description="Most recent scan in range" 
               />
               <StatCard 
-                title="Top Location" 
+                title="Top Approx. IP Location" 
                 value={topLocationLabel} 
-                description={selectedStats.topLocation ? `${selectedStats.topLocation.count} scans` : 'No location data'} 
+                description={
+                  selectedStats.topLocation
+                    ? `${selectedStats.topLocation.count} scans. Based on IP; may reflect ISP, carrier, VPN, proxy, or cloud routing.`
+                    : 'No location data'
+                } 
               />
               <StatCard 
                 title="Best Scan Hour" 

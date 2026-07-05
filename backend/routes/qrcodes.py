@@ -1,13 +1,24 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, QRCode, Scan
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, and_
 import uuid
 
 bp = Blueprint('qrcodes', __name__, url_prefix='/api/qrcodes')
 
 # No user-specific filtering
+
+
+def serialize_utc(dt):
+    """Serialize database datetimes as explicit UTC ISO 8601 strings."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
 
 @bp.route('', methods=['GET'])
 @jwt_required()
@@ -28,9 +39,9 @@ def get_qrcodes():
         'name': qr.name,
         'short_code': qr.short_code,
         'target_url': qr.target_url,
-        'created_at': qr.created_at.isoformat(),
+        'created_at': serialize_utc(qr.created_at),
         'scan_count': int(scan_count or 0),
-        'last_scanned_at': last_scanned_at.isoformat() if last_scanned_at else None,
+        'last_scanned_at': serialize_utc(last_scanned_at) if last_scanned_at else None,
         'folder': qr.folder,
         'short_url': f"{request.host_url}r/{qr.short_code}"
     } for qr, scan_count, last_scanned_at in rows])
@@ -46,10 +57,10 @@ def get_qrcode(qrcode_id):
         'short_code': qrcode.short_code,
         'target_url': qrcode.target_url,
         'description': qrcode.description,
-        'created_at': qrcode.created_at.isoformat(),
+        'created_at': serialize_utc(qrcode.created_at),
         'scans': [{
             'id': scan.id,
-            'timestamp': scan.timestamp.isoformat(),
+            'timestamp': serialize_utc(scan.timestamp),
             'ip_address': scan.ip_address,
             'user_agent': scan.user_agent,
             'country': scan.country,
@@ -112,7 +123,7 @@ def get_qrcode_flexible(identifier):
             try:
                 scan_info = {
                     'id': scan.id,
-                    'timestamp': scan.timestamp.isoformat() if scan.timestamp else None,
+                    'timestamp': serialize_utc(scan.timestamp),
                     'ip_address': scan.ip_address,
                     'user_agent': scan.user_agent,
                     'country': scan.country,
@@ -140,7 +151,7 @@ def get_qrcode_flexible(identifier):
             'target_url': qrcode.target_url,
             'description': qrcode.description,
             'folder': qrcode.folder,
-            'created_at': qrcode.created_at.isoformat() if qrcode.created_at else None,
+            'created_at': serialize_utc(qrcode.created_at) if qrcode.created_at else None,
             'scans': scan_dicts,
             'short_url': f"{request.host_url}r/{qrcode.short_code}"
         })
@@ -184,7 +195,7 @@ def get_qrcode_by_short_code(short_code):
         "short_code": qrcode.short_code,
         "target_url": qrcode.target_url,
         "folder": qrcode.folder,
-        "created_at": qrcode.created_at.isoformat(),
+        "created_at": serialize_utc(qrcode.created_at),
         "qr_code_image": f"data:image/png;base64,{img_str}",
         "short_url": f"{request.host_url}r/{short_code}"
     })
@@ -206,7 +217,7 @@ def download_scans_csv_by_short_code(short_code):
     for scan in scans:
         writer.writerow([
             scan.id,
-            scan.timestamp.isoformat() if scan.timestamp else '',
+            serialize_utc(scan.timestamp) or '',
             scan.ip_address,
             scan.user_agent,
             scan.country,
@@ -305,7 +316,7 @@ def update_qrcode(qrcode_id):
         'short_code': qrcode.short_code,
         'folder': qrcode.folder,
         'description': qrcode.description,
-        'created_at': qrcode.created_at.isoformat(),
+        'created_at': serialize_utc(qrcode.created_at),
         'scan_count': len(qrcode.scans),
         'qr_code_image': f"data:image/png;base64,{img_str}",
         'short_url': f"{request.host_url}r/{qrcode.short_code}"
@@ -339,7 +350,7 @@ def create_qrcode():
         'name': qrcode.name,
         'short_code': qrcode.short_code,
         'target_url': qrcode.target_url,
-        'created_at': qrcode.created_at.isoformat(),
+        'created_at': serialize_utc(qrcode.created_at),
         'folder': qrcode.folder,
         'description': qrcode.description,
         'short_url': f"{request.host_url}r/{qrcode.short_code}"
